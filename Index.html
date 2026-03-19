@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internal System Development</title>
+    
+    <!-- Manifest for PWA -->
+    <link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;SQM Project&quot;,&quot;short_name&quot;:&quot;SQM&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;#ffffff&quot;,&quot;theme_color&quot;:&quot;#3b82f6&quot;,&quot;description&quot;:&quot;Internal System Development Project Dashboard.&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;https://i.ibb.co/9gqYyDk/icon-192x192.png&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/png&quot;},{&quot;src&quot;:&quot;https://i.ibb.co/jZqjJqV/icon-512x512.png&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/png&quot;}]}">
+    
+    <!-- External Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://unpkg.com/tributejs@5.1.3/dist/tribute.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/tributejs@5.1.3/dist/tribute.css" />
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Include Custom Stylesheet from another HTML file -->
+    <?!= include('Stylesheet'); ?>
+
+</head>
+<body class="antialiased text-gray-800">
+
+    <!-- App Container -->
+    <div id="app-container" class="flex flex-col h-screen">
+        <!-- Header -->
+        <header class="px-4 sm:px-6 py-3 border-b border-gray-200 bg-white flex-shrink-0">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900">Internal System Development</h1>
+                        <p class="text-xs text-gray-500">แผนกพัฒนาธุรกิจ</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2 sm:space-x-4">
+                    <!-- View Toggle Buttons -->
+                    <div id="view-toggle-buttons" class="hidden sm:flex items-center rounded-lg bg-gray-100 p-1">
+                        <button id="kanban-view-btn" class="view-toggle-btn view-toggle-btn-active">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+                            บอร์ด
+                        </button>
+                        <button id="calendar-view-btn" class="view-toggle-btn">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            ปฏิทิน
+                        </button>
+                    </div>
+
+                    <div id="search-filter-container" class="hidden items-center space-x-2">
+                        <input type="text" id="search-input" placeholder="ค้นหา..." class="w-32 sm:w-48 bg-gray-100 border border-gray-300 text-gray-700 py-2 px-3 rounded-lg leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all">
+                        <select id="user-filter-select" class="bg-gray-100 border border-gray-300 text-gray-700 py-2 px-3 pr-8 rounded-lg leading-tight focus:outline-none focus:bg-white focus:border-blue-500"></select>
+                    </div>
+                    <button id="addProjectBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-sm hover:shadow-md flex items-center transition-all">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        <span class="hidden sm:inline">เพิ่มงานใหม่</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main id="kanban-view" class="flex-grow overflow-y-hidden">
+             <div class="h-full p-4 sm:p-6 overflow-x-auto kanban-board">
+                <div id="kanban-container" class="flex space-x-4 h-full">
+                    <div id="skeleton-loader" class="flex space-x-4 h-full w-full">
+                        <div class="flex-shrink-0 w-80 h-full bg-gray-200 rounded-xl skeleton"></div>
+                        <div class="flex-shrink-0 w-80 h-full bg-gray-200 rounded-xl skeleton"></div>
+                        <div class="flex-shrink-0 w-80 h-full bg-gray-200 rounded-xl skeleton"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <main id="calendar-view" class="hidden flex-grow flex flex-col p-4 sm:p-6 bg-white"></main>
+
+        <main id="detail-view" class="hidden flex-grow"></main>
+    
+        <footer class="text-center py-3 border-t border-gray-200 bg-white flex-shrink-0">
+            <p class="text-gray-500 text-xs">Internal System Development © 2025</p>
+        </footer>
+    
+    </div>
+
+    <!-- HTML Templates -->
+    <template id="project-card-template">
+        <div class="project-card relative bg-white rounded-lg shadow-sm p-3.5 hover:shadow-lg hover:-translate-y-1 transition-all" draggable="true">
+            <button class="delete-card-btn">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <div class="cursor-pointer">
+                <div class="flex justify-between items-start mb-2">
+                    <h3 class="card-project-name text-md font-semibold text-gray-800 break-words pr-2">Project Name</h3>
+                    <span class="card-due-date-badge"></span>
+                </div>
+                <div class="flex items-center mt-3 pt-3 border-t border-gray-100">
+                    <img class="card-assignee-image w-7 h-7 rounded-full mr-2 object-cover" src="">
+                    <span class="card-assignee-name text-sm font-medium text-gray-600">Assignee</span>
+                    <div class="ml-auto flex items-center space-x-2">
+                        <span class="card-timestamp text-xs text-gray-400">Date</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <template id="checklist-item-template">
+        <div class="checklist-item flex flex-col bg-slate-50 p-3 rounded-lg shadow-sm hover:bg-slate-100">
+            <div class="flex justify-between items-start mb-2">
+                <div class="flex items-center flex-grow cursor-pointer" data-action="show-checklist-detail">
+                    <p class="item-text text-gray-800 mr-2 flex-grow">Checklist Item Text</p>
+                </div>
+                <div class="flex items-center">
+                    <button data-action="edit-checklist" title="แก้ไขงานย่อย" class="item-edit-btn text-gray-400 hover:text-blue-600 ml-2 hidden">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z"></path></svg>
+                    </button>
+                    <span class="item-status text-xs font-semibold py-1 px-2 rounded-full cursor-pointer">Status</span>
+                </div>
+            </div>
+            <div class="flex items-center justify-between mt-auto pt-2 border-t cursor-pointer" data-action="show-checklist-detail">
+                <div class="flex items-center space-x-2">
+                    <div class="flex items-center">
+                       <img class="item-assignee-image w-6 h-6 rounded-full mr-2 object-cover" src="">
+                       <span class="item-assignee-name text-xs text-gray-600">Assignee</span>
+                    </div>
+                    <div class="item-due-date flex items-center text-xs text-gray-500"></div>
+                    <div class="item-comment-badge flex items-center text-xs text-blue-600 ml-2"></div>
+                </div>
+                <div class="item-action-button flex items-center ml-auto"></div>
+            </div>
+        </div>
+    </template>
+
+    <template id="log-entry-template">
+         <div class="log-entry text-sm pt-2">
+            <p class="log-text text-gray-800 whitespace-pre-wrap">Log text here</p>
+            <div class="log-files mt-1 space-y-1"></div>
+            <div class="log-link mt-1"></div>
+            <p class="log-meta text-gray-400 text-xs mt-1">โดย User - Timestamp</p>
+        </div>
+    </template>
+
+    <script>
+        const urlParams = <?!= JSON.stringify(urlParams || {}) ?>;
+    </script>
+
+    <?!= include('JavaScript'); ?>
+
+</body>
+</html>
