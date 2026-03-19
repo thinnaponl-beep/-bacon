@@ -1,0 +1,128 @@
+<style>
+    /* General body styling */
+    body { 
+        font-family: 'Sarabun', sans-serif; 
+        background-color: #f0f2f5; 
+    }
+
+    /* Custom scrollbar for Kanban board */
+    .kanban-board::-webkit-scrollbar { height: 8px; }
+    .kanban-board::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 10px; }
+    .kanban-board::-webkit-scrollbar-thumb { background-color: #a0aec0; border-radius: 10px; }
+
+    /* SweetAlert2 custom styling */
+    .swal2-popup { font-family: 'Sarabun', sans-serif !important; }
+    .swal2-title { font-size: 1.5rem !important; }
+    .swal2-html-container { font-size: 1rem !important; text-align: left !important; }
+
+    /* Date input placeholder styling */
+    input[type="date"]:not(:valid):before { content: attr(placeholder); color: #9ca3af; }
+
+    /* Skeleton loader animation */
+    .skeleton { animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+
+    /* Drag and drop styling */
+    .drag-over { background-color: #e0f2fe; border: 2px dashed #90cdf4; }
+
+    /* "My Tasks" button active state */
+    .my-tasks-active { 
+        background-color: #eff6ff !important; 
+        border-color: #3b82f6 !important; 
+        color: #1e40af !important; 
+        font-weight: 700 !important; 
+    }
+
+    /* Notification dot on cards */
+    .notification-dot { position: absolute; top: 0.5rem; right: 0.5rem; width: 0.75rem; height: 0.75rem; }
+
+    /* Hide HTML template tags by default */
+    template { display: none; }
+
+    /* View Toggle Button Styles */
+    .view-toggle-btn {
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #4b5563;
+        display: flex;
+        align-items: center;
+        transition: all 0.2s ease-in-out;
+    }
+    .view-toggle-btn:hover {
+        background-color: #e5e7eb;
+    }
+    .view-toggle-btn-active {
+        background-color: #ffffff;
+        color: #1d4ed8;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    }
+
+    /* Delete Card Button */
+    .delete-card-btn {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        padding: 4px;
+        border-radius: 9999px;
+        color: #9ca3af; /* gray-400 */
+        background-color: transparent;
+        opacity: 0;
+        transition: all 0.2s ease-in-out;
+        z-index: 10;
+    }
+    .project-card:hover .delete-card-btn {
+        opacity: 1;
+    }
+    .delete-card-btn:hover {
+        background-color: #fee2e2; /* red-100 */
+        color: #ef4444; /* red-500 */
+    }
+
+
+    /* Calendar View Styles */
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        flex-grow: 1;
+        border-top: 1px solid #e5e7eb;
+        border-left: 1px solid #e5e7eb;
+    }
+    .calendar-day-header {
+        text-align: center;
+        font-weight: 600;
+        padding: 8px 4px;
+        font-size: 12px;
+        color: #4b5563;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    .calendar-day {
+        border-right: 1px solid #e5e7eb;
+        border-bottom: 1px solid #e5e7eb;
+        padding: 4px;
+        min-height: 120px;
+        position: relative;
+    }
+    .calendar-day-number {
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .calendar-day-other-month .calendar-day-number {
+        color: #9ca3af;
+    }
+    .calendar-day-today {
+        background-color: #eff6ff;
+    }
+    .calendar-task {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-top: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+        color: white;
+    }
+</style>
