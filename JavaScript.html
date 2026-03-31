@@ -1,37 +1,39 @@
-<script>
-// This single script contains all the client-side logic for the application.
-// It's structured with objects to keep the code organized.
+<!-- เพิ่ม Library สำหรับบีบอัดข้อมูลก่อนส่งเข้า Google Sheets ป้องกันเซลล์เต็ม -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
 
+<script>
 document.addEventListener('DOMContentLoaded', () => {
     // =================================================================
     //  APP CONFIGURATION & STATE
     // =================================================================
     const Config = {
-        STATUS_ORDER: ["New", "In Progress", "On Hold", "Incomplete", "Completed"],
-        USER_SELECTABLE_STATUSES: ["In Progress", "On Hold", "Incomplete", "Completed"],
+        STATUS_ORDER: ["New", "In Progress", "Change Request", "On Hold", "Incomplete", "Completed"],
+        USER_SELECTABLE_STATUSES: ["In Progress", "Change Request", "On Hold", "Incomplete", "Completed"],
         STATUS_STYLES: {
-            "New": { bg: "bg-gray-200", text: "text-gray-800", border: "border-gray-400" },
-            "In Progress": { bg: "bg-yellow-200", text: "text-yellow-800", border: "border-yellow-400" },
-            "Wait for Review": { bg: "bg-indigo-200", text: "text-indigo-800", border: "border-indigo-400" },
-            "Completed": { bg: "bg-green-200", text: "text-green-800", border: "border-green-400" },
-            "On Hold": { bg: "bg-orange-200", text: "text-orange-800", border: "border-orange-400" },
-            "Incomplete": { bg: "bg-red-200", text: "text-red-800", border: "border-red-400" },
+            "New": { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-300", badge: "bg-slate-200 text-slate-700" },
+            "In Progress": { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-400", badge: "bg-blue-100 text-blue-700" },
+            "Change Request": { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-400", badge: "bg-purple-100 text-purple-700" },
+            "Wait for Review": { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-400", badge: "bg-indigo-100 text-indigo-700" },
+            "Completed": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-400", badge: "bg-emerald-100 text-emerald-700" },
+            "On Hold": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-400", badge: "bg-amber-100 text-amber-700" },
+            "Incomplete": { bg: "bg-red-50", text: "text-red-700", border: "border-red-400", badge: "bg-red-100 text-red-700" },
         },
         DEFAULT_AVATAR: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2E1YjRjYyI+PHBhdGggZD0iTTAgMGgyNHYyNEgwVjB6IiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTIwIDEyQzIwIDYuNDggMTUuNTIgMiAxMiAyUzQgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFptLTggMy45MWMtMS45OSAwLTMuNjEtMS40Ni0zLjkzLTMuMzQgMS43NC0uNjUgMy41OC0xIDUuNDItMXMzLjY4LjM1IDUuNDIgMWMtLjMyIDEuODgtMS45NCAzLjM0LTMuOTMgMy4zNHptMCAxLjQxYzIuNSAwIDQuNzItMS4wMiA2LjM2LTIuNjYtLjI5LTEuOTItMi40LTMuNDQtNS44Ni0zLjU0aC0uMDFjLS4zNCAwLS42Ny4wMi0xLjAxLjA1di4wMWMtMy40NS0uMS01LjU2LTEuNjMtNS44NS0zLjUzQzUuMjggMy44MiA3LjQ5IDIuOSAxMCAyLjljMi45MSAwIDUuNTIgMS4zMSA2LjM2IDIuNjZDNS4yOCAxOC4xOCA3LjUgMTkuMSAxMCAxOS4xeiIvPjw" + "/" + "c3ZnPg==",
     };
+    
     const AppState = {
         admins: [], projects: [], currentUser: null, currentProject: null,
-        unreadProjectIds: [], // This is now unused but kept for structure
         isMyTasksMode: false, countdownInterval: null,
         currentCalendarDate: new Date(),
     };
     
-    // Directly initialize the DOMElements object.
     const DOMElements = {
         addProjectBtn: document.getElementById('addProjectBtn'),
+        settingsBtn: document.getElementById('settingsBtn'),
         kanbanContainer: document.getElementById('kanban-container'),
         kanbanView: document.getElementById('kanban-view'),
         calendarView: document.getElementById('calendar-view'),
+        ganttView: document.getElementById('gantt-view'),
         detailView: document.getElementById('detail-view'),
         searchFilterContainer: document.getElementById('search-filter-container'),
         userFilterSelect: document.getElementById('user-filter-select'),
@@ -40,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
         viewToggleButtons: document.getElementById('view-toggle-buttons'),
         kanbanViewBtn: document.getElementById('kanban-view-btn'),
         calendarViewBtn: document.getElementById('calendar-view-btn'),
+        ganttViewBtn: document.getElementById('gantt-view-btn'),
     };
 
     const API = {
@@ -55,18 +58,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const UI = {
         showView(viewName) {
-            ['kanban', 'calendar', 'detail'].forEach(view => {
+            ['kanban', 'calendar', 'gantt', 'detail'].forEach(view => {
                 const el = DOMElements[view + 'View'];
                 if (el) el.classList.toggle('hidden', view !== viewName);
             });
 
             const isDetail = viewName === 'detail';
             DOMElements.addProjectBtn.classList.toggle('hidden', isDetail);
-            DOMElements.searchFilterContainer.classList.toggle('hidden', isDetail || viewName === 'calendar');
+            DOMElements.settingsBtn.classList.toggle('hidden', isDetail);
+            DOMElements.searchFilterContainer.classList.toggle('hidden', isDetail || viewName === 'calendar' || viewName === 'gantt');
             DOMElements.viewToggleButtons.classList.toggle('hidden', isDetail);
 
             DOMElements.kanbanViewBtn.classList.toggle('view-toggle-btn-active', viewName === 'kanban');
             DOMElements.calendarViewBtn.classList.toggle('view-toggle-btn-active', viewName === 'calendar');
+            DOMElements.ganttViewBtn.classList.toggle('view-toggle-btn-active', viewName === 'gantt');
             
             if (AppState.countdownInterval) clearInterval(AppState.countdownInterval);
         },
@@ -76,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
         linkify(text) {
             if (!text) return '';
             const urlRegex = /((?:https?:\/\/|www\.)[^\s<]+)/g;
-            return text.replace(urlRegex, url => `<a href="${url.startsWith('www.') ? 'http://' + url : url}" target="_blank" class="text-blue-600 hover:underline break-all">${url}</a>`);
+            return text.replace(urlRegex, url => `<a href="${url.startsWith('www.') ? 'http://' + url : url}" target="_blank" class="text-indigo-600 hover:underline break-all">${url}</a>`);
         },
         readFileAsBase64(file) {
             return new Promise((resolve, reject) => {
@@ -97,8 +102,315 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             tribute.attach(element);
         },
+        getUserColorClass(emailStr) {
+            const colors = ['bg-red-400', 'bg-blue-400', 'bg-green-400', 'bg-yellow-400', 'bg-purple-400', 'bg-pink-400', 'bg-indigo-400', 'bg-teal-400', 'bg-orange-400', 'bg-cyan-400'];
+            let hash = 0;
+            if(!emailStr) return 'bg-gray-400';
+            for (let i = 0; i < emailStr.length; i++) hash = emailStr.charCodeAt(i) + ((hash << 5) - hash);
+            return colors[Math.abs(hash) % colors.length];
+        }
     };
 
+    // =================================================================
+    //  PERSONAL TO-DO LIST MODULE
+    // =================================================================
+    const PersonalTodo = {
+        currentTab: 'active',
+        searchQuery: '',
+        isExpanded: false,
+        init() {
+            this.container = document.getElementById('todo-items-container');
+            this.form = document.getElementById('add-todo-form');
+            this.input = document.getElementById('todo-input-text');
+            this.dateInput = document.getElementById('todo-input-date');
+            this.sidebar = document.getElementById('todo-sidebar');
+            this.overlay = document.getElementById('todo-overlay');
+            this.notificationDot = document.getElementById('todo-notification-dot');
+            
+            this.expandBtn = document.getElementById('expand-todo-btn');
+            this.searchInput = document.getElementById('todo-search-input');
+            this.tabActive = document.getElementById('todo-tab-active');
+            this.tabCompleted = document.getElementById('todo-tab-completed');
+            
+            const toggleSidebar = () => {
+                const isClosed = this.sidebar.classList.contains('translate-x-full');
+                if (isClosed) {
+                    this.sidebar.classList.remove('translate-x-full');
+                    this.overlay.classList.remove('hidden');
+                } else {
+                    this.sidebar.classList.add('translate-x-full');
+                    this.overlay.classList.add('hidden');
+                }
+            };
+
+            document.getElementById('toggle-todo-btn').addEventListener('click', toggleSidebar);
+            document.getElementById('close-todo-btn').addEventListener('click', toggleSidebar);
+            this.overlay.addEventListener('click', toggleSidebar);
+
+            this.expandBtn.addEventListener('click', () => {
+                this.isExpanded = !this.isExpanded;
+                if (this.isExpanded) {
+                    this.sidebar.classList.remove('sm:w-96');
+                    this.sidebar.classList.add('sm:w-[500px]', 'md:w-[600px]');
+                    this.expandBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>`;
+                } else {
+                    this.sidebar.classList.remove('sm:w-[500px]', 'md:w-[600px]');
+                    this.sidebar.classList.add('sm:w-96');
+                    this.expandBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>`;
+                }
+            });
+
+            this.searchInput.addEventListener('input', (e) => {
+                this.searchQuery = e.target.value.toLowerCase();
+                this.loadTodos();
+            });
+
+            this.tabActive.addEventListener('click', () => {
+                this.currentTab = 'active';
+                this.updateTabUI();
+                this.loadTodos();
+            });
+            
+            this.tabCompleted.addEventListener('click', () => {
+                this.currentTab = 'completed';
+                this.updateTabUI();
+                this.loadTodos();
+            });
+
+            this.form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.addTodo(this.input.value, this.dateInput ? this.dateInput.value : null);
+                this.input.value = '';
+                if (this.dateInput) this.dateInput.value = '';
+            });
+
+            setInterval(() => this.checkReminders(), 60000);
+
+            window.PersonalTodo = this;
+            this.updateTabUI();
+            this.loadTodos();
+            this.checkReminders();
+        },
+        updateTabUI() {
+            if (this.currentTab === 'active') {
+                this.tabActive.className = 'flex-1 py-1.5 text-sm font-semibold rounded-lg bg-white shadow-sm text-indigo-600 transition-all';
+                this.tabCompleted.className = 'flex-1 py-1.5 text-sm font-medium rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-200/50 transition-all';
+            } else {
+                this.tabCompleted.className = 'flex-1 py-1.5 text-sm font-semibold rounded-lg bg-white shadow-sm text-indigo-600 transition-all';
+                this.tabActive.className = 'flex-1 py-1.5 text-sm font-medium rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-200/50 transition-all';
+            }
+        },
+        checkReminders() {
+            const todos = JSON.parse(localStorage.getItem('sqm_personal_todos') || '[]');
+            const now = new Date();
+            let hasDueTasks = false;
+            let needsRender = false;
+            
+            todos.forEach(todo => {
+                if (!todo.completed && todo.dueDate) {
+                    const dueDate = new Date(todo.dueDate);
+                    if (now >= dueDate) {
+                        hasDueTasks = true;
+                        if (!todo.notified) {
+                            todo.notified = true;
+                            needsRender = true;
+                        }
+                    }
+                }
+            });
+            
+            if (needsRender) {
+                this.saveTodos(todos); 
+            }
+            
+            if (this.notificationDot) {
+                if (hasDueTasks) {
+                    this.notificationDot.classList.remove('hidden');
+                } else {
+                    this.notificationDot.classList.add('hidden');
+                }
+            }
+        },
+        loadTodos() {
+            let todos = JSON.parse(localStorage.getItem('sqm_personal_todos') || '[]');
+            this.container.innerHTML = '';
+            
+            if (this.searchQuery) {
+                todos = todos.filter(t => t.text.toLowerCase().includes(this.searchQuery));
+            }
+
+            if (this.currentTab === 'active') {
+                todos = todos.filter(t => !t.completed);
+            } else {
+                todos = todos.filter(t => t.completed);
+            }
+
+            if (todos.length === 0) {
+                this.container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-40 text-center text-gray-400 mt-6">
+                        <svg class="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                        <p class="text-sm">ไม่พบรายการ</p>
+                    </div>`;
+            } else {
+                todos.sort((a,b) => {
+                    if(a.dueDate && b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate);
+                    if(a.dueDate) return -1;
+                    if(b.dueDate) return 1;
+                    return b.id - a.id; 
+                }).forEach((todo) => this.renderTodo(todo));
+            }
+        },
+        saveTodos(todos) {
+            localStorage.setItem('sqm_personal_todos', JSON.stringify(todos));
+            this.loadTodos();
+            this.checkReminders();
+        },
+        addTodo(text, dueDate = null) {
+            if (!text.trim()) return;
+            const todos = JSON.parse(localStorage.getItem('sqm_personal_todos') || '[]');
+            todos.push({ text: text, dueDate: dueDate, completed: false, notified: false, id: Date.now() });
+            
+            this.currentTab = 'active';
+            this.updateTabUI();
+            this.saveTodos(todos);
+        },
+        toggleTodo(id) {
+            const todos = JSON.parse(localStorage.getItem('sqm_personal_todos') || '[]');
+            const index = todos.findIndex(t => t.id === id);
+            if (index > -1) {
+                todos[index].completed = !todos[index].completed;
+                if(todos[index].completed) todos[index].notified = false; 
+                this.saveTodos(todos);
+            }
+        },
+        deleteTodo(id) {
+            let todos = JSON.parse(localStorage.getItem('sqm_personal_todos') || '[]');
+            todos = todos.filter(t => t.id !== id);
+            this.saveTodos(todos);
+        },
+        renderTodo(todo) {
+            const div = document.createElement('div');
+            let dueDateHtml = '';
+            let isOverdue = false;
+            
+            if (todo.dueDate) {
+                const dueDate = new Date(todo.dueDate);
+                const now = new Date();
+                isOverdue = !todo.completed && now >= dueDate;
+                
+                const formattedDate = dueDate.toLocaleString('th-TH', { 
+                    day: 'numeric', month: 'short', 
+                    hour: '2-digit', minute: '2-digit' 
+                });
+                
+                dueDateHtml = `<div class="mt-1 flex items-center text-[11px] font-semibold ${isOverdue ? 'text-red-500 animate-pulse' : 'text-indigo-400'}">
+                    <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    ${formattedDate} ${isOverdue ? '(ถึงกำหนด)' : ''}
+                </div>`;
+            }
+
+            div.className = `flex items-start justify-between p-3.5 rounded-xl border transition-all ${todo.completed ? 'bg-gray-100/50 border-gray-100 opacity-60' : (isOverdue ? 'bg-red-50 border-red-200 shadow-sm' : 'bg-white border-gray-200 shadow-sm hover:shadow')}`;
+            div.innerHTML = `
+                <div class="flex items-start cursor-pointer flex-grow pr-3" onclick="PersonalTodo.toggleTodo(${todo.id})">
+                    <input type="checkbox" ${todo.completed ? 'checked' : ''} class="mt-1.5 w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer flex-shrink-0 transition-colors">
+                    <div class="flex flex-col ml-3">
+                        <span class="text-sm font-medium ${todo.completed ? 'line-through text-gray-400' : 'text-gray-700'} leading-snug">${todo.text}</span>
+                        ${dueDateHtml}
+                    </div>
+                </div>
+                <button onclick="PersonalTodo.deleteTodo(${todo.id}); event.stopPropagation();" class="text-gray-300 hover:text-red-500 transition-colors p-1 flex-shrink-0 mt-0.5" title="ลบงานนี้">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+            `;
+            this.container.appendChild(div);
+        }
+    };
+
+    // =================================================================
+    //  GANTT CHART MODULE
+    // =================================================================
+    const GanttView = {
+        chart: null,
+        render() {
+            const container = document.getElementById('gantt-chart-container');
+            container.innerHTML = '';
+            
+            const tasks = AppState.projects.map(p => {
+                const start = new Date(p.rawTimestamp).toISOString().split('T')[0];
+                let end = p.projectDueDate ? new Date(p.projectDueDate).toISOString().split('T')[0] : '';
+                
+                if(!end) {
+                    const d = new Date(p.rawTimestamp);
+                    d.setDate(d.getDate() + 7);
+                    end = d.toISOString().split('T')[0];
+                }
+
+                let progress = 0;
+                const checklist = p.detailsData?.checklist || [];
+                if (checklist.length > 0) {
+                    const completed = checklist.filter(item => item.status === 'Completed' || item.status === 'Complete').length;
+                    progress = Math.round((completed / checklist.length) * 100);
+                } else if (p.status === 'Completed') {
+                    progress = 100;
+                }
+
+                return {
+                    id: p.projectId,
+                    name: p.projectName,
+                    start: start,
+                    end: end,
+                    progress: progress,
+                    custom_class: p.status === 'Completed' ? 'gantt-completed' : 'gantt-active'
+                };
+            });
+
+            if (tasks.length === 0) {
+                container.innerHTML = '<div class="text-center p-10 mt-10 text-gray-500 font-medium">ยังไม่มีงานสำหรับแสดงไทม์ไลน์</div>';
+                return;
+            }
+
+            this.chart = new Gantt("#gantt-chart-container", tasks, {
+                view_mode: 'Week',
+                language: 'en',
+                bar_height: 30,
+                padding: 18,
+                on_click: (task) => {
+                    App.openDetailView(task.id);
+                },
+                on_date_change: async (task, start, end) => {
+                    const startDateStr = new Date(start.getTime() - (start.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                    const endDateStr = new Date(end.getTime() - (end.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                    
+                    UI.showLoading('กำลังบันทึกวันที่...');
+                    try {
+                        const response = await API.run('updateProjectDates', task.id, startDateStr, endDateStr);
+                        if (response.status === 'success') {
+                            UI.showSuccess('บันทึกสำเร็จ');
+                            App.loadInitialData(); 
+                        } else {
+                            UI.showError(response.message);
+                            GanttView.render(); 
+                        }
+                    } catch (err) {
+                        UI.showError(err.message);
+                        GanttView.render(); 
+                    }
+                }
+            });
+
+            document.querySelectorAll('.gantt-zoom-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    if(this.chart) {
+                        this.chart.change_view_mode(e.target.dataset.view);
+                    }
+                });
+            });
+        }
+    };
+
+    // =================================================================
+    //  COMPONENTS MODULE 
+    // =================================================================
     const Components = {
         createProjectCard(project) {
             const template = document.getElementById('project-card-template');
@@ -106,28 +418,130 @@ document.addEventListener('DOMContentLoaded', () => {
             card.dataset.projectId = project.projectId;
             card.dataset.status = project.status;
             
-            const cardContent = card.querySelector('.cursor-pointer');
-            cardContent.addEventListener('click', () => App.openDetailView(project.projectId));
+            const cardStyle = Config.STATUS_STYLES[project.status] || Config.STATUS_STYLES["New"];
+            
+            const badge = card.querySelector('.card-status-badge');
+            badge.textContent = project.status;
+            badge.className = `card-status-badge text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wide mb-2 inline-block ${cardStyle.badge}`;
 
             card.querySelector('.card-project-name').textContent = project.projectName;
-            card.querySelector('.card-assignee-name').textContent = project.assignedTo || 'ยังไม่ระบุ';
+            card.querySelector('.card-assignee-name').textContent = project.assignedTo || 'Unassigned';
             card.querySelector('.card-assignee-image').src = project.assignedToImage || Config.DEFAULT_AVATAR;
-            card.querySelector('.card-timestamp').textContent = project.timestamp;
-
-            if (project.projectDueDate && project.status !== 'Completed') {
-                const today = new Date(); today.setHours(0, 0, 0, 0);
-                const dueDate = new Date(project.projectDueDate);
-                const diffDays = Math.ceil((dueDate - today) / 864e5);
-                const badge = card.querySelector('.card-due-date-badge');
-                if (diffDays < 0) badge.innerHTML = `<span class="text-xs font-semibold text-white bg-red-500 px-2 py-1 rounded-full ml-auto">ล่าช้า</span>`;
-                else if (diffDays <= 7) badge.innerHTML = `<span class="text-xs font-semibold text-white bg-orange-500 px-2 py-1 rounded-full ml-auto">ใกล้ถึงกำหนด</span>`;
-            }
-            // Removed notification dot logic
             
-            const deleteButton = card.querySelector('.delete-card-btn');
-            deleteButton.addEventListener('click', (e) => {
+            let dueDateText = 'ไม่ระบุ';
+            let dueDateClass = 'text-gray-500';
+            let borderClass = 'border-gray-100'; 
+
+            if (project.projectDueDate) {
+                const dueDateObj = new Date(project.projectDueDate);
+                const now = new Date();
+                
+                const compareDate = new Date(dueDateObj);
+                compareDate.setHours(0,0,0,0);
+                now.setHours(0,0,0,0);
+                
+                const diffDays = Math.ceil((compareDate - now) / (1000 * 60 * 60 * 24));
+                dueDateText = dueDateObj.toLocaleDateString('th-TH', { month:'short', day:'numeric'});
+
+                if (project.status !== 'Completed') {
+                    if (diffDays < 0) {
+                        dueDateClass = 'text-red-600 font-bold';
+                        dueDateText += ' (เลยกำหนด)';
+                        borderClass = 'border-pulse-red'; 
+                    } else if (diffDays <= 1) {
+                        dueDateClass = 'text-orange-500 font-bold';
+                        dueDateText += ` (พรุ่งนี้/วันนี้)`;
+                        borderClass = 'border-pulse-orange'; 
+                    } else if (diffDays <= 3) {
+                        dueDateClass = 'text-yellow-600 font-bold';
+                        dueDateText += ` (เหลือ ${diffDays} วัน)`;
+                        borderClass = 'border-pulse-yellow'; 
+                    }
+                }
+            }
+            
+            card.className = `project-card card-hover relative bg-white rounded-2xl p-4 border shadow-sm group cursor-pointer ${borderClass}`;
+
+            const dueDateEl = card.querySelector('.card-due-date-text');
+            dueDateEl.textContent = dueDateText;
+            dueDateEl.className = `card-due-date-text text-[11px] ${dueDateClass}`;
+
+            const creationLog = project.detailsData?.logs?.find(log => log.type === 'project_creation');
+            const creatorEmail = creationLog ? creationLog.user : 'ไม่ระบุอีเมล';
+            const createdDate = new Date(project.rawTimestamp);
+            const createdStr = createdDate.toLocaleString('th-TH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            
+            const creatorEl = card.querySelector('.card-creator-text');
+            if (creatorEl) creatorEl.textContent = `${creatorEmail} • ${createdStr}`;
+
+            let progress = 0;
+            const checklist = project.detailsData?.checklist || [];
+            if (checklist.length > 0) {
+                const completed = checklist.filter(item => item.status === 'Completed' || item.status === 'Complete').length;
+                progress = Math.round((completed / checklist.length) * 100);
+            } else if (project.status === 'Completed') {
+                progress = 100;
+            }
+            card.querySelector('.card-progress-bar').style.width = `${progress}%`;
+            card.querySelector('.card-progress-text').textContent = `${progress}%`;
+            
+            // เพิ่มไอคอนแจ้งเตือนว่ามีลิงก์บนการ์ด
+            const hasLink = (project.projectLinks && project.projectLinks.length > 0) || project.projectLink;
+            if (hasLink) {
+                const badgeContainer = card.querySelector('.flex.items-center.space-x-3');
+                if(badgeContainer) {
+                    const linkIconHtml = `<div class="flex items-center text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded shadow-sm border border-blue-100" title="มีลิงก์แนบ">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                    </div>`;
+                    badgeContainer.insertAdjacentHTML('afterbegin', linkIconHtml);
+                }
+            }
+
+            const comments = project.detailsData?.logs?.filter(l => l.type === 'comment') || [];
+            const commentBadge = card.querySelector('.card-comment-badge');
+            if (comments.length > 0) {
+                commentBadge.classList.remove('hidden');
+                commentBadge.classList.add('flex');
+                card.querySelector('.card-comment-count').textContent = comments.length;
+
+                const lastCommentTime = new Date(comments[comments.length - 1].timestamp);
+                const now = new Date();
+                const diffHours = (now - lastCommentTime) / (1000 * 60 * 60);
+                if (diffHours <= 24) {
+                    card.querySelector('.card-comment-ping').classList.remove('hidden');
+                }
+            }
+
+            const completeBtn = card.querySelector('.quick-complete-btn');
+            const deleteBtn = card.querySelector('.delete-card-btn');
+            const editBtn = card.querySelector('.quick-edit-btn');
+            
+            if(project.status === 'Completed') completeBtn.style.display = 'none';
+
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                Components.showEditProjectPopup(project);
+            });
+
+            completeBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                UI.showLoading('กำลังปิดงาน...');
+                try {
+                    const response = await API.run('updateProjectStatus', project.projectId, 'Completed');
+                    if(response.status === 'success') { UI.showSuccess('ปิดงานสำเร็จ!'); App.loadInitialData(); }
+                    else { UI.showError(response.message); }
+                } catch(err) { UI.showError(err.message); }
+            });
+
+            deleteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 Components.showDeleteProjectPopup(project.projectId, project.projectName);
+            });
+
+            card.addEventListener('click', (e) => {
+                if(!e.target.closest('.quick-complete-btn') && !e.target.closest('.delete-card-btn') && !e.target.closest('.quick-edit-btn')) {
+                    App.openDetailView(project.projectId);
+                }
             });
 
             return card;
@@ -137,15 +551,18 @@ document.addEventListener('DOMContentLoaded', () => {
             AppState.admins.forEach(admin => adminOptions += `<option value="${admin.name}" data-image="${admin.imageUrl}">${admin.name}</option>`);
             const { value: result } = await Swal.fire({
                 title: 'เพิ่มงานใหม่',
-                html: `<form id="popupInspectionForm" class="text-left p-1 space-y-4">
-                                <div class="bg-gray-50 p-3 rounded-lg border"><label class="block mb-1">ชื่องาน:</label><input type="text" id="swal-projectName" class="w-full p-2 border rounded-md" required></div>
-                                <div class="bg-gray-50 p-3 rounded-lg border"><label class="block mb-1">กำหนดส่ง:</label><input type="date" id="swal-projectDueDate" class="w-full p-2 border rounded-md"></div>
-                                <div class="bg-gray-50 p-3 rounded-lg border"><label class="block mb-1">รายละเอียด:</label><textarea id="swal-details" rows="2" class="w-full p-2 border rounded-md"></textarea></div>
-                                <div class="bg-gray-50 p-3 rounded-lg border"><label class="block mb-1">แนบลิงก์ (ถ้ามี):</label><input type="url" id="swal-projectLink" class="w-full p-2 border rounded-md" placeholder="https://example.com"></div>
-                                <div class="bg-gray-50 p-3 rounded-lg border"><label class="block mb-1">แนบไฟล์:</label><input type="file" id="swal-fileInput" class="w-full text-sm"></div>
-                                <div class="bg-gray-50 p-3 rounded-lg border"><label class="block mb-1">มอบหมายให้:</label><select id="swal-assignedTo" class="w-full p-2 border rounded-md">${adminOptions}</select></div>
+                html: `<form id="popupInspectionForm" class="text-left space-y-4">
+                                <div><label class="block mb-1 text-sm font-medium text-gray-700">ชื่องาน:</label><input type="text" id="swal-projectName" class="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition" required></div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div><label class="block mb-1 text-sm font-medium text-gray-700">กำหนดส่ง:</label><input type="date" id="swal-projectDueDate" class="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none"></div>
+                                    <div><label class="block mb-1 text-sm font-medium text-gray-700">มอบหมายให้:</label><select id="swal-assignedTo" class="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none">${adminOptions}</select></div>
+                                </div>
+                                <div><label class="block mb-1 text-sm font-medium text-gray-700">รายละเอียด:</label><textarea id="swal-details" rows="2" class="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none"></textarea></div>
+                                <div><label class="block mb-1 text-sm font-medium text-gray-700">แนบลิงก์ (ถ้ามี):</label><input type="url" id="swal-projectLink" class="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white outline-none" placeholder="https://..."></div>
+                                <div><label class="block mb-1 text-sm font-medium text-gray-700">แนบไฟล์:</label><input type="file" id="swal-fileInput" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"></div>
                                </form>`,
                 showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'ยกเลิก', width: '40rem',
+                customClass: { confirmButton: 'bg-indigo-600', cancelButton: 'bg-gray-400' },
                 preConfirm: () => {
                     const projectName = document.getElementById('swal-projectName').value;
                     if (!projectName) { Swal.showValidationMessage('กรุณากรอกชื่องาน'); return false; }
@@ -173,36 +590,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (err) { UI.showError(err.message); }
             }
         },
-        async showEditProjectPopup() {
-            const project = AppState.currentProject;
-            if (!project) return;
+        async showEditProjectPopup(projectToEdit = null) {
+             const project = projectToEdit || AppState.currentProject;
+             if (!project) return;
 
-            const { value: formValues } = await Swal.fire({
+             let adminOptions = '<option value="" data-image="">-- ไม่ระบุ --</option>';
+             AppState.admins.forEach(admin => {
+                 const isSelected = (admin.name === project.assignedTo) ? 'selected' : '';
+                 adminOptions += `<option value="${admin.name}" data-image="${admin.imageUrl}" ${isSelected}>${admin.name}</option>`;
+             });
+
+             const { value: formValues } = await Swal.fire({
                 title: 'แก้ไขรายละเอียดงาน',
                 html:
                     `<div class="text-left space-y-4 p-2">` +
                     `    <div>` +
-                    `        <label for="swal-edit-projectName" class="block mb-1 font-medium text-gray-700">ชื่องาน:</label>` +
-                    `        <input id="swal-edit-projectName" class="w-full p-2 border rounded-md" value="${project.projectName}">` +
+                    `        <label for="swal-edit-projectName" class="block mb-1 text-sm font-medium text-gray-700">ชื่องาน:</label>` +
+                    `        <input id="swal-edit-projectName" class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" value="${project.projectName}">` +
                     `    </div>` +
                     `    <div>` +
-                    `        <label for="swal-edit-projectDueDate" class="block mb-1 font-medium text-gray-700">กำหนดส่ง:</label>` +
-                    `        <input id="swal-edit-projectDueDate" type="date" class="w-full p-2 border rounded-md" value="${project.projectDueDate || ''}">` +
+                    `        <label for="swal-edit-assignedTo" class="block mb-1 text-sm font-medium text-gray-700">ผู้รับผิดชอบ:</label>` +
+                    `        <select id="swal-edit-assignedTo" class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">${adminOptions}</select>` +
+                    `    </div>` +
+                    `    <div>` +
+                    `        <label for="swal-edit-projectDueDate" class="block mb-1 text-sm font-medium text-gray-700">กำหนดส่ง:</label>` +
+                    `        <input id="swal-edit-projectDueDate" type="date" class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" value="${project.projectDueDate || ''}">` +
                     `    </div>` +
                     `</div>`,
                 focusConfirm: false,
                 showCancelButton: true,
-                confirmButtonText: 'บันทึก',
+                confirmButtonText: 'บันทึกการแก้ไข',
                 cancelButtonText: 'ยกเลิก',
+                customClass: { confirmButton: 'bg-indigo-600', cancelButton: 'bg-gray-400' },
                 preConfirm: () => {
                     const newName = document.getElementById('swal-edit-projectName').value.trim();
+                    const assigneeSelect = document.getElementById('swal-edit-assignedTo');
+                    const newAssignee = assigneeSelect.value;
+                    const newAssigneeImage = assigneeSelect.options[assigneeSelect.selectedIndex].dataset.image;
+
                     if (!newName) {
                         Swal.showValidationMessage('กรุณากรอกชื่องาน');
                         return false;
                     }
                     return {
                         newName: newName,
-                        newDueDate: document.getElementById('swal-edit-projectDueDate').value
+                        newDueDate: document.getElementById('swal-edit-projectDueDate').value,
+                        newAssignee: newAssignee,
+                        newAssigneeImage: newAssigneeImage
                     };
                 }
             });
@@ -210,15 +644,74 @@ document.addEventListener('DOMContentLoaded', () => {
             if (formValues) {
                 UI.showLoading('กำลังบันทึกการเปลี่ยนแปลง...');
                 try {
-                    const response = await API.run('updateProjectCoreInfo', project.projectId, formValues.newName, formValues.newDueDate);
+                    const response = await API.run('updateProjectCoreInfoEx', project.projectId, formValues.newName, formValues.newDueDate, formValues.newAssignee, formValues.newAssigneeImage);
                     if (response.status === 'success') {
                         UI.showSuccess('บันทึกสำเร็จ');
-                        App.refreshDetailView();
+                        if (AppState.currentProject && AppState.currentProject.projectId === project.projectId) {
+                            App.refreshDetailView();
+                        } else {
+                            App.loadInitialData(); 
+                        }
                     } else {
                         UI.showError(response.message);
                     }
                 } catch (err) {
-                    UI.showError(err.message);
+                    UI.showError('การบันทึกอาจล้มเหลว กรุณาเพิ่มฟังก์ชันอัปเดตลงใน Apps Script ก่อนครับ');
+                }
+            }
+        },
+        async showSettingsPopup() {
+            const currentUserEmail = AppState.currentUser?.email || '';
+            
+            const { value: formValues } = await Swal.fire({
+                title: 'ตั้งค่า / เพิ่มผู้ใช้งาน',
+                html: `
+                    <div class="text-left space-y-4 p-2 mt-2">
+                        <div class="bg-indigo-50 p-3 rounded-lg text-sm text-indigo-800 border border-indigo-100 flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            อีเมลของคุณคือ: <b>${currentUserEmail}</b>
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-sm font-medium text-gray-700">ชื่อที่จะแสดง (Display Name):</label>
+                            <input id="swal-user-name" class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="เช่น: Somchai">
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-sm font-medium text-gray-700">อีเมล (Email):</label>
+                            <input id="swal-user-email" type="email" class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" value="${currentUserEmail}">
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-sm font-medium text-gray-700">URL รูปโปรไฟล์ (ถ้ามี):</label>
+                            <input id="swal-user-image" type="url" class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="ปล่อยว่างได้">
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'เพิ่มผู้ใช้งาน',
+                cancelButtonText: 'ยกเลิก',
+                customClass: { confirmButton: 'bg-indigo-600', cancelButton: 'bg-gray-400' },
+                preConfirm: () => {
+                    const name = document.getElementById('swal-user-name').value.trim();
+                    const email = document.getElementById('swal-user-email').value.trim();
+                    if (!name || !email) {
+                        Swal.showValidationMessage('กรุณากรอกชื่อและอีเมลให้ครบถ้วน');
+                        return false;
+                    }
+                    return { name, email, image: document.getElementById('swal-user-image').value.trim() };
+                }
+            });
+
+            if (formValues) {
+                UI.showLoading('กำลังเพิ่มผู้ใช้...');
+                try {
+                    const response = await API.run('addAdminUser', formValues.name, formValues.email, formValues.image);
+                    if (response.status === 'success') {
+                        UI.showSuccess('เพิ่มผู้ใช้สำเร็จ');
+                        App.loadInitialData();
+                    } else {
+                        UI.showError(response.message);
+                    }
+                } catch (e) {
+                    UI.showError('การเพิ่มผู้ใช้อาจล้มเหลว กรุณาเพิ่มฟังก์ชันใน Apps Script ก่อนครับ');
                 }
             }
         },
@@ -232,11 +725,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     `<div class="text-left space-y-4 p-2">` +
                     `    <div>` +
                     `        <label for="swal-edit-details" class="block mb-1 font-medium text-gray-700">รายละเอียด:</label>` +
-                    `        <textarea id="swal-edit-details" class="w-full p-2 border rounded-md" rows="3">${project.details || ''}</textarea>` +
+                    `        <textarea id="swal-edit-details" class="w-full p-2 border border-gray-300 rounded-md" rows="3">${project.details || ''}</textarea>` +
                     `    </div>` +
                     `    <div>` +
                     `        <label for="swal-edit-projectLink" class="block mb-1 font-medium text-gray-700">ลิงก์:</label>` +
-                    `        <input id="swal-edit-projectLink" type="url" class="w-full p-2 border rounded-md" value="${project.projectLinks.length > 0 ? project.projectLinks[0].url : ''}"` +
+                    `        <input id="swal-edit-projectLink" type="url" class="w-full p-2 border border-gray-300 rounded-md" value="${project.projectLinks && project.projectLinks.length > 0 ? project.projectLinks[0].url : ''}">` +
                     `    </div>` +
                     `</div>`,
                 focusConfirm: false,
@@ -267,11 +760,11 @@ document.addEventListener('DOMContentLoaded', () => {
         async showDeleteProjectPopup(projectId, projectName) {
             const { isConfirmed } = await Swal.fire({
                 title: 'ยืนยันการลบ',
-                html: `คุณต้องการลบงาน "<b>${projectName}</b>" ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`,
+                html: `คุณต้องการลบงาน "<b>${projectName}</b>" ใช่หรือไม่? <br><span class="text-sm text-red-500">การกระทำนี้ไม่สามารถย้อนกลับได้</span>`,
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#9ca3af',
                 confirmButtonText: 'ใช่, ลบเลย!',
                 cancelButtonText: 'ยกเลิก'
             });
@@ -290,317 +783,770 @@ document.addEventListener('DOMContentLoaded', () => {
                     UI.showError(err.message);
                 }
             }
+        }
+    };
+
+    // =================================================================
+    //  DETAIL VIEW MODULE
+    // =================================================================
+    const DetailView = {
+        render(project) {
+            AppState.currentProject = project;
+            DOMElements.detailView.innerHTML = this.generateMainHTML(project);
+            this.renderChecklist();
+            this.renderLogs();
+            this.renderGantt(project); 
+            this.addEventListeners();
         },
-        showProjectListByStatus(status) {
-            const projectsInStatus = AppState.projects
-                .filter(p => p.status === status)
-                .sort((a, b) => new Date(b.rawTimestamp) - new Date(a.rawTimestamp));
-            if (projectsInStatus.length === 0) {
-                Swal.fire({ icon: 'info', title: 'ไม่มีงาน', text: `ไม่พบงานในสถานะ "${status}"` });
-                return;
+        generateMainHTML(project) {
+            const statusOptions = Config.USER_SELECTABLE_STATUSES
+                .map(s => `<option value="${s}" ${s === project.status ? 'selected' : ''}>${s}</option>`)
+                .join('');
+                
+            let adminOptions = '<option value="" data-image="" data-email="">-- มอบหมายให้ --</option>';
+            AppState.admins.forEach(admin => adminOptions += `<option value="${admin.name}" data-image="${admin.imageUrl}" data-email="${admin.email}">${admin.name}</option>`);
+
+            const creationLog = project.detailsData?.logs?.find(log => log.type === 'project_creation');
+            const creatorEmail = creationLog ? creationLog.user : 'ไม่ระบุอีเมล';
+            const createdDate = new Date(project.rawTimestamp);
+            const createdStr = createdDate.toLocaleString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+            // เตรียม HTML สำหรับแสดงลิงก์ที่แนบไว้
+            let linksHtml = '';
+            if (project.projectLinks && project.projectLinks.length > 0) {
+                linksHtml = '<div class="mt-4 flex flex-wrap gap-2">';
+                project.projectLinks.forEach(link => {
+                    if(link.url) {
+                         linksHtml += `<a href="${link.url}" target="_blank" class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors border border-blue-200 shadow-sm">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                            ${link.label || 'ลิงก์แนบ'}
+                         </a>`;
+                    }
+                });
+                linksHtml += '</div>';
+            } else if (project.projectLink) {
+                linksHtml = `<div class="mt-4 flex flex-wrap gap-2"><a href="${project.projectLink}" target="_blank" class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg hover:bg-blue-100 transition-colors border border-blue-200 shadow-sm">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                            ลิงก์แนบ
+                         </a></div>`;
             }
-            let projectListHtml = '<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 max-h-[70vh] overflow-y-auto p-2">';
-            projectsInStatus.forEach(project => {
-                projectListHtml += `
-                    <div class="bg-white rounded-xl shadow p-4 flex flex-col justify-between cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all"
-                         onclick="Swal.close(); App.openDetailView('${project.projectId}')">
-                        <h4 class="text-base font-bold text-gray-800 mb-3 break-words leading-tight">${project.projectName}</h4>
-                        <div class="mt-auto pt-3 border-t border-gray-100 space-y-2">
-                            <div class="flex items-center">
-                                <img src="${project.assignedToImage || Config.DEFAULT_AVATAR}" class="w-5 h-5 rounded-full mr-2 object-cover">
-                                <p class="text-xs text-gray-600 truncate" title="${project.assignedTo || 'ยังไม่ระบุ'}">${project.assignedTo || 'ยังไม่ระบุ'}</p>
+
+            return `
+            <div class="h-full flex flex-col p-4 md:p-8 overflow-hidden bg-slate-50/50">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-6 border-b border-gray-200 flex-shrink-0">
+                    <div>
+                        <h2 id="detail-project-name" class="text-2xl md:text-3xl font-bold text-gray-900 mb-2">${project.projectName}</h2>
+                        <p class="text-gray-500 text-sm flex items-center flex-wrap gap-2">
+                            <span class="bg-white border border-gray-200 px-3 py-1 rounded-full text-xs font-semibold text-gray-700 flex items-center shadow-sm">
+                                <img src="${project.assignedToImage || Config.DEFAULT_AVATAR}" class="w-4 h-4 rounded-full mr-1.5 object-cover">
+                                ${project.assignedTo || 'ไม่มีผู้รับผิดชอบ'}
+                            </span>
+                            <span class="bg-white border border-gray-200 px-3 py-1 rounded-full text-xs font-semibold text-gray-700 shadow-sm flex items-center">
+                                <svg class="w-3.5 h-3.5 mr-1.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                กำหนดส่ง: ${project.projectDueDate || 'ไม่ระบุ'}
+                                <button id="inline-edit-date-btn" class="ml-2 text-indigo-400 hover:text-indigo-600 transition-colors" title="แก้ไขวันส่งและผู้รับผิดชอบ">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z"></path></svg>
+                                </button>
+                            </span>
+                            <span class="bg-white border border-gray-200 px-3 py-1 rounded-full text-xs font-semibold text-gray-500 shadow-sm flex items-center">
+                                <svg class="w-3.5 h-3.5 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                เพิ่มโดย: ${creatorEmail} (${createdStr})
+                            </span>
+                        </p>
+                    </div>
+                    <div class="mt-4 md:mt-0 flex gap-2">
+                        <button id="back-to-kanban-btn" class="bg-white hover:bg-gray-100 text-gray-700 font-medium py-2 px-5 border border-gray-200 rounded-xl shadow-sm transition-all text-sm">
+                            กลับหน้าหลัก
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="action-bar" class="flex flex-wrap items-end gap-3 mb-6 p-4 bg-white rounded-2xl border border-gray-200 shadow-sm flex-shrink-0">
+                    <div class="flex-grow md:flex-grow-0">
+                        <label class="text-xs font-bold text-gray-500 uppercase tracking-wide">เปลี่ยนสถานะภาพรวมของงาน</label>
+                        <select id="detail-status-select" class="w-full md:w-64 mt-1.5 bg-gray-50 border border-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-colors">
+                            ${statusOptions}
+                        </select>
+                    </div>
+                    <button id="updateStatusBtn" class="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-semibold text-sm hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg w-full md:w-auto">
+                        บันทึกสถานะ
+                    </button>
+                </div>
+
+                <div class="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-y-auto pb-10">
+                    <div class="lg:col-span-2 space-y-6">
+                        
+                        <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm relative group">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="text-lg font-bold text-gray-900 flex items-center">
+                                    <svg class="w-5 h-5 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    รายละเอียดงาน
+                                </h3>
+                                <div class="flex space-x-1">
+                                    <button id="expand-details-btn" class="text-gray-400 hover:text-indigo-600 bg-gray-50 hover:bg-indigo-50 p-1.5 rounded-lg transition-all" title="ขยายอ่านเต็มจอ">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                                    </button>
+                                    <button id="edit-initial-info-btn" class="text-gray-400 hover:text-indigo-600 bg-gray-50 hover:bg-indigo-50 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z"></path></svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="flex items-center text-gray-500">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                <p class="text-xs">${project.timestamp}</p>
+                            <p class="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed line-clamp-6">${project.details || '<span class="text-gray-400 italic">ไม่มีรายละเอียด</span>'}</p>
+                            ${linksHtml}
+                            
+                            <div class="mt-4 pt-4 border-t border-gray-100">
+                                <button id="open-whiteboard-btn" class="w-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold py-3 px-4 rounded-xl hover:bg-indigo-100 hover:shadow-md transition-all flex items-center justify-center">
+                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z"></path></svg>
+                                    เปิดกระดานวาดภาพ (Whiteboard & Flowchart)
+                                </button>
+                                <p class="text-center text-[10px] text-gray-400 mt-2">✨ ออกแบบ Flow ของงานได้อย่างอิสระผ่าน Excalidraw</p>
                             </div>
                         </div>
-                    </div>`;
-            });
-            projectListHtml += '</div>';
-            Swal.fire({
-                title: `<span class="text-2xl font-bold">รายการงานในสถานะ: ${status}</span>`,
-                html: projectListHtml,
-                width: '90vw',
-                showConfirmButton: false,
-                showCloseButton: true,
-                background: '#f0f2f5'
-            });
-        },
-        showChecklistDetail(index) {
-            let currentItem = AppState.currentProject.detailsData.checklist[index];
-            if (!currentItem) return;
+                        
+                        <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                            <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                                <svg class="w-5 h-5 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                                ไทม์ไลน์งานย่อย (Sub-tasks)
+                            </h3>
+                            <div class="overflow-x-auto border border-gray-100 rounded-xl bg-gray-50/30">
+                                <div id="project-gantt-container" class="w-full min-h-[150px]"></div>
+                            </div>
+                        </div>
 
-            const generatePopupHtml = (item) => {
-                const currentUser = AppState.currentUser;
-                const isCurrentUserAssigned = item.assigneeEmail === currentUser.email;
-                const projectAdmins = AppState.admins;
-
-                const createFileHtml = (file) => {
-                    if (!file || !file.url) return '';
-                    return `<a href="${file.url}" target="_blank" class="flex items-center text-sm text-blue-600 hover:underline bg-blue-50 p-2 rounded-md mt-1"><svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg><span class="truncate">${file.name}</span></a>`;
-                };
-                const createLinkHtml = (link) => {
-                    if (!link || !link.url) return '';
-                    return `<a href="${link.url}" target="_blank" class="flex items-center text-sm text-purple-600 hover:underline bg-purple-50 p-2 rounded-md mt-1"><svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg><span class="truncate">${link.label || link.url}</span></a>`;
-                };
-                
-                const createSystemLogHtml = (log) => {
-                    const filesHtml = (log.files || []).map(createFileHtml).join('');
-                    const linkHtml = log.link ? createLinkHtml(log.link) : '';
-                     return `<div class="text-xs text-gray-600 border-b border-gray-200 py-2">
-                                 <p>${UI.linkify(log.text)}</p>
-                                 <div class="mt-1 space-y-1">${filesHtml}${linkHtml}</div>
-                                 <p class="text-gray-400 text-right mt-1">- ${new Date(log.timestamp).toLocaleString('th-TH')}</p>
-                                </div>`;
-                };
-                
-                const createCommentHtml = (log) => {
-                    const isFromCurrentUser = log.user === currentUser.email;
-                    const alignmentClass = isFromCurrentUser ? 'justify-end' : 'justify-start';
-                    const bubbleClass = isFromCurrentUser ? 'bg-blue-100' : 'bg-white';
-                    const userHtml = `<span class="font-semibold text-gray-700">${log.user.split('@')[0]}</span>`;
-                    const filesHtml = (log.files || []).map(createFileHtml).join('');
+                        <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                            <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                                <svg class="w-5 h-5 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                                งานย่อย (Checklist)
+                            </h3>
+                            <form id="add-checklist-form" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 items-center p-4 bg-indigo-50/50 rounded-xl mb-5 border border-indigo-100">
+                                <input type="text" id="checklist-input" class="xl:col-span-2 p-2.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-sm" placeholder="ระบุชื่องานย่อย...">
+                                <input type="date" id="checklist-duedate" class="p-2.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-gray-600 shadow-sm">
+                                <select id="checklist-assignee-select" class="p-2.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-sm">${adminOptions}</select>
+                                <button type="submit" class="xl:col-span-4 w-full bg-indigo-600 text-white px-4 py-2.5 rounded-lg hover:bg-indigo-700 font-semibold transition-colors text-sm shadow-md">เพิ่มงานย่อย</button>
+                            </form>
+                            <div id="checklist-container" class="grid grid-cols-1 gap-3"></div>
+                        </div>
+                    </div>
                     
-                    return `<div class="flex ${alignmentClass} w-full">
-                                 <div class="max-w-md">
-                                     ${!isFromCurrentUser ? `<div class="text-xs font-semibold text-gray-600 mb-1">${userHtml}</div>` : ''}
-                                     <div class="p-3 rounded-lg ${bubbleClass} shadow-sm border border-gray-200">
-                                         <p class="text-gray-800 whitespace-pre-wrap text-sm">${UI.linkify(log.text)}</p>
-                                         <div class="mt-2 space-y-1">${filesHtml}</div>
-                                     </div>
-                                     <div class="text-gray-400 text-xs mt-1 ${isFromCurrentUser ? 'text-right' : 'text-left'}">
-                                         ${new Date(log.timestamp).toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                                     </div>
-                                 </div>
-                                </div>`;
-                };
-                
-                const historyLogs = (item.history || []).filter(log => log.type !== 'comment');
-                const commentLogs = (item.comments || []);
-                const historyFeedHtml = historyLogs.length > 0 ? historyLogs.map(createSystemLogHtml).join('') : '<p class="text-gray-400 text-sm p-4 text-center">ไม่มีประวัติการทำงาน</p>';
-                const conversationFeedHtml = commentLogs.length > 0 ? commentLogs.map(createCommentHtml).join('<div class="h-3"></div>') : '<p class="text-gray-400 text-sm p-4 text-center">ยังไม่มีการสนทนา</p>';
+                    <div class="lg:col-span-1 bg-white p-0 rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[600px] lg:h-full min-h-[500px]">
+                        <div class="p-5 border-b border-gray-100 bg-gray-50 rounded-t-2xl">
+                            <h3 class="text-lg font-bold text-gray-900 flex items-center">
+                                <svg class="w-5 h-5 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"></path></svg>
+                                ความเคลื่อนไหว
+                            </h3>
+                        </div>
+                        <div id="log-container" class="p-5 space-y-4 flex-grow overflow-y-auto bg-white"></div>
+                        
+                        <div class="p-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl mt-auto">
+                            <textarea id="comment-input" rows="2" class="w-full p-3 border border-gray-300 rounded-xl resize-none outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-inner" placeholder="พิมพ์อัปเดต หรือ @ แท็กเพื่อนร่วมทีม..."></textarea>
+                            <div class="flex justify-end mt-3">
+                                <button id="add-comment-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-5 rounded-xl shadow-md transition-all text-sm flex items-center">
+                                    ส่งข้อความ
+                                    <svg class="w-4 h-4 ml-1.5" fill="currentColor" viewBox="0 0 20 20"><path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.949a.75.75 0 00.95.574l3.11-1.555a.75.75 0 000-1.338L3.23.863a.75.75 0 00-.125-.074zM10.23 8.863a.75.75 0 00.125.074l7.08 3.54a.75.75 0 00.826-.95l-1.414-4.949a.75.75 0 00-.95-.574l-3.11 1.555a.75.75 0 000 1.338z"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        },
+        renderGantt(project) {
+            const container = document.getElementById('project-gantt-container');
+            const checklist = project.detailsData?.checklist || [];
+            
+            if (checklist.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-sm text-center py-10 font-medium">โปรดเพิ่มงานย่อย (Checklist) ก่อน เพื่อดูไทม์ไลน์การทำงาน</p>';
+                return;
+            }
 
-                let actionPanelHtml = '';
-                if (isCurrentUserAssigned && item.status !== 'New' && item.status !== 'Complete') {
-                    const selectable = Config.USER_SELECTABLE_STATUSES.filter(s => s !== 'In Progress' && s !== 'Completed');
-                    const statusOptions = selectable.map(s => `<option value="${s}">${s}</option>`).join('');
-                    const userOptions = projectAdmins.filter(a => a.email !== currentUser.email).map(a => `<option value="${a.name}">${a.name}</option>`).join('');
-                    actionPanelHtml = `
-                          <div class="border bg-slate-50 rounded-lg">
-                               <div id="action-panel-toggle" class="flex justify-between items-center p-4 cursor-pointer">
-                                   <h4 class="font-bold text-gray-800 text-lg">แผงควบคุมงาน</h4>
-                                   <div class="flex items-center">
-                                       <button id="swal-edit-task-btn" class="text-sm text-blue-600 hover:underline p-1 z-10">แก้ไข</button>
-                                       <button id="swal-delete-task-btn" class="text-sm text-red-600 hover:underline p-1 z-10">ลบ</button>
-                                       <svg id="action-panel-icon" class="w-6 h-6 ml-2 text-gray-600 transition-transform transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                   </div>
-                               </div>
-                               <div id="action-panel-content" class="p-4 border-t space-y-4 overflow-hidden transition-all duration-500 ease-in-out" style="max-height: 0px;">
-                                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                       <div><label class="block text-sm font-medium text-gray-700">เปลี่ยนสถานะ</label><div class="flex items-center mt-1"><select id="swal-change-status-select" class="block w-full p-2 border border-gray-300 bg-white rounded-md shadow-sm sm:text-sm"><option value="">-- เลือกสถานะ --</option>${statusOptions}</select><button id="swal-change-status-btn" class="ml-2 bg-yellow-500 text-white p-2 rounded-md hover:bg-yellow-600 font-semibold h-10 flex-shrink-0">อัปเดต</button></div></div>
-                                       <div><label class="block text-sm font-medium text-gray-700">ส่งต่องานให้</label><div class="flex items-center mt-1"><select id="swal-forward-user-select" class="block w-full p-2 border border-gray-300 bg-white rounded-md shadow-sm sm:text-sm"><option value="">-- เลือกผู้ใช้ --</option>${userOptions}</select><button id="swal-forward-task-btn" class="ml-2 bg-indigo-500 text-white p-2 rounded-md hover:bg-indigo-600 font-semibold h-10 flex-shrink-0">ส่งต่อ</button></div></div>
-                                   </div>
-                                   <div>
-                                       <label class="block text-sm font-medium text-gray-700">อัปเดตความคืบหน้า / ปิดงาน</label>
-                                       <textarea id="swal-update-log" class="mt-1 w-full p-2 border rounded" placeholder="ระบุรายละเอียดการทำงาน..."></textarea>
-                                       <div class="grid grid-cols-2 gap-2 mt-2">
-                                           <input type="text" id="swal-update-link-url" class="p-2 border rounded" placeholder="URL ของลิงก์">
-                                           <input type="text" id="swal-update-link-label" class="p-2 border rounded" placeholder="ป้ายกำกับลิงก์ (ถ้ามี)">
-                                       </div>
-                                       <input type="file" id="swal-update-file" class="mt-2 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-                                       <div class="flex justify-end mt-2 space-x-2">
-                                           <button id="swal-update-progress-btn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center font-semibold"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3"></path></svg><span>บันทึกความคืบหน้า</span></button>
-                                           <button id="swal-checklist-complete-btn" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 flex items-center font-semibold"><svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.052-.143z" clip-rule="evenodd"></path></svg><span>บันทึกและปิดงาน</span></button>
-                                       </div>
-                                   </div>
-                               </div>
-                          </div>`;
-                } else if (isCurrentUserAssigned && item.status === 'New') {
-                    actionPanelHtml = `<div class="mt-4 pt-4 border-t text-center"><button id="swal-checklist-accept-btn" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-bold text-lg animate-pulse">รับงานนี้</button></div>`;
+            const tasks = checklist.map((item, index) => {
+                const start = item.startDate ? new Date(item.startDate).toISOString().split('T')[0] : new Date(project.rawTimestamp).toISOString().split('T')[0];
+                let end = '';
+                if (item.dueDate) {
+                    end = new Date(item.dueDate).toISOString().split('T')[0];
+                } else if (project.projectDueDate) {
+                    end = new Date(project.projectDueDate).toISOString().split('T')[0];
+                } else {
+                    const d = new Date(project.rawTimestamp);
+                    d.setDate(d.getDate() + 2);
+                    end = d.toISOString().split('T')[0];
                 }
 
-                return `<div id="checklist-popup-content" class="grid grid-cols-1 lg:grid-cols-2 gap-6 p-2">
-                                 <!-- Left Column -->
-                                 <div class="flex flex-col h-[80vh]">
-                                     <div class="space-y-4">
-                                         <div class="grid grid-cols-2 gap-4 pb-4 border-b">
-                                             <div><p class="font-medium text-gray-500">สถานะ:</p><p class="font-semibold text-lg">${item.status}</p></div>
-                                             <div><p class="font-medium text-gray-500">ผู้รับผิดชอบ:</p><p class="font-semibold text-lg">${item.assignee || 'N/A'}</p></div>
-                                         </div>
-                                         ${actionPanelHtml}
-                                     </div>
-                                     <div class="mt-4 pt-4 border-t flex-grow overflow-y-auto">
-                                         <h4 class="font-semibold mb-2 text-gray-800 sticky top-0 bg-white py-1">ประวัติการทำงาน</h4>
-                                         <div id="swal-history-container" class="space-y-1 pr-2">${historyFeedHtml}</div>
-                                     </div>
-                                 </div>
+                if (new Date(end) < new Date(start)) {
+                    end = start;
+                }
 
-                                 <!-- Right Column (Chat Feed) -->
-                                 <div class="flex flex-col h-[80vh] bg-gray-100 rounded-lg border">
-                                     <div class="p-3 border-b font-semibold text-gray-800">การสนทนา</div>
-                                     <div id="swal-conversation-container" class="flex-grow p-3 space-y-4 overflow-y-auto">
-                                         ${conversationFeedHtml}
-                                     </div>
-                                     <div class="p-3 border-t bg-white">
-                                         <textarea id="swal-checklist-comment" class="w-full p-2 border rounded" placeholder="พิมพ์ข้อความ..."></textarea>
-                                         <div class="flex justify-between items-center mt-2">
-                                             <input type="file" id="swal-comment-file" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100"/>
-                                             <button id="swal-checklist-comment-btn" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 flex items-center flex-shrink-0">
-                                                 <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.949a.75.75 0 00.95.574l3.11-1.555a.75.75 0 000-1.338L3.23.863a.75.75 0 00-.125-.074zM10.23 8.863a.75.75 0 00.125.074l7.08 3.54a.75.75 0 00.826-.95l-1.414-4.949a.75.75 0 00-.95-.574l-3.11 1.555a.75.75 0 000 1.338z"></path></svg><span>ส่ง</span>
-                                             </button>
-                                         </div>
-                                     </div>
-                                 </div>
-                                </div>`;
-            };
+                let progress = 0;
+                if (item.status === 'Completed' || item.status === 'Complete') progress = 100;
+                else if (item.status === 'In Progress') progress = 50;
 
-            Swal.fire({
-                title: `<span class="text-xl font-bold">${currentItem.text}</span>`,
-                html: generatePopupHtml(currentItem),
-                showCloseButton: true,
-                showConfirmButton: false,
-                width: '90vw',
-                customClass: { popup: 'p-4' },
-                didOpen: () => {
-                    const setupEventListeners = (item) => {
-                        UI.initializeMention(document.getElementById('swal-checklist-comment'));
-                        
-                        const handleApiCall = async (button, action, params, isDynamicUpdate = false) => {
-                            const originalContent = button.innerHTML;
-                            button.disabled = true;
-                            button.innerHTML = 'กำลังประมวลผล...';
-                            try {
-                                const response = await API.run(action, ...params);
-                                if (response.status === 'success') {
-                                    if (isDynamicUpdate && response.data) {
-                                        AppState.currentProject.detailsData.checklist[index] = response.data;
-                                        currentItem = response.data;
-                                        DetailView.renderChecklist();
-                                        const newHtml = generatePopupHtml(currentItem);
-                                        const contentWrapper = Swal.getHtmlContainer();
-                                        if(contentWrapper) {
-                                            contentWrapper.innerHTML = newHtml;
-                                            setupEventListeners(currentItem);
-                                        }
-                                    } else {
-                                        Swal.close();
-                                        App.refreshDetailView();
-                                    }
-                                } else {
-                                    UI.showError(response.message);
-                                    if(button && document.body.contains(button)) {
-                                        button.disabled = false;
-                                        button.innerHTML = originalContent;
-                                    }
-                                }
-                            } catch (err) {
-                                UI.showError(err.message);
-                                if(button && document.body.contains(button)) {
-                                    button.disabled = false;
-                                    button.innerHTML = originalContent;
-                                }
-                            }
-                        };
-                        
-                        document.getElementById('action-panel-toggle')?.addEventListener('click', (e) => {
-                            if (e.target.closest('#swal-edit-task-btn') || e.target.closest('#swal-delete-task-btn')) return;
-                            const content = document.getElementById('action-panel-content');
-                            const icon = document.getElementById('action-panel-icon');
-                            if (content) {
-                                if (content.style.maxHeight && content.style.maxHeight !== "0px") {
-                                    content.style.maxHeight = "0px";
-                                    content.classList.remove('mt-4', 'p-4', 'border-t');
-                                    icon.classList.remove('rotate-180');
-                                } else {
-                                    content.style.maxHeight = content.scrollHeight + "px";
-                                    content.classList.add('mt-4', 'p-4', 'border-t');
-                                    icon.classList.add('rotate-180');
-                                }
-                            }
-                        });
+                return {
+                    id: `subtask-${index}`,
+                    name: item.text,
+                    start: start,
+                    end: end,
+                    progress: progress,
+                    custom_class: (item.status === 'Completed' || item.status === 'Complete') ? 'gantt-completed' : 'gantt-active'
+                };
+            });
 
-                        document.getElementById('swal-checklist-comment-btn')?.addEventListener('click', async (e) => {
-                            const button = e.currentTarget;
-                            const input = document.getElementById('swal-checklist-comment');
-                            const fileInput = document.getElementById('swal-comment-file');
-                            const text = input.value.trim();
-                            const file = fileInput.files[0];
-                            if (!text && !file) return UI.showError('กรุณาพิมพ์ข้อความหรือแนบไฟล์');
-                            
-                            const commentData = { 
-                                checklistIndex: index, 
-                                commentText: text || 'ส่งไฟล์แนบ',
-                                mentionedEmails: (text.match(/@([\w.]+)/g) || []).map(name => getEmailByUserName(name.substring(1))).filter(Boolean)
-                            };
-                            if (file) commentData.files = [await UI.readFileAsBase64(file)];
-                            handleApiCall(button, 'addCommentToChecklistItem', [AppState.currentProject.projectId, commentData], true);
-                        });
-
-                        document.getElementById('swal-checklist-accept-btn')?.addEventListener('click', (e) => handleApiCall(e.target, 'acceptChecklistTask', [AppState.currentProject.projectId, index], true));
-                        
-                        document.getElementById('swal-change-status-btn')?.addEventListener('click', (e) => {
-                            const newStatus = document.getElementById('swal-change-status-select').value;
-                            if (!newStatus) return UI.showError('กรุณาเลือกสถานะที่ต้องการเปลี่ยน');
-                            handleApiCall(e.target, 'updateChecklistItemStatus', [AppState.currentProject.projectId, { checklistIndex: index, newStatus, logText: `เปลี่ยนสถานะเป็น ${newStatus}` }], true);
-                        });
-
-                        document.getElementById('swal-forward-task-btn')?.addEventListener('click', (e) => {
-                            const assigneeName = document.getElementById('swal-forward-user-select').value;
-                            if (!assigneeName) return UI.showError('กรุณาเลือกผู้ใช้ที่ต้องการส่งต่องาน');
-                            handleApiCall(e.target, 'assignChecklistItem', [AppState.currentProject.projectId, index, assigneeName], true);
-                        });
-                        
-                        const handleProgressUpdate = async (button, isComplete) => {
-                            const logInput = document.getElementById('swal-update-log');
-                            const fileInput = document.getElementById('swal-update-file');
-                            const linkUrlInput = document.getElementById('swal-update-link-url');
-                            const linkLabelInput = document.getElementById('swal-update-link-label');
-                            const logText = logInput.value.trim();
-                            const file = fileInput.files[0];
-                            const linkUrl = linkUrlInput.value.trim();
-                            const linkLabel = linkLabelInput.value.trim();
-                            if (!logText && !file && !linkUrl) return UI.showError('กรุณาระบุรายละเอียด, แนบไฟล์ หรือแนบลิงก์');
-                            
-                            const updateData = { checklistIndex: index, logText: logText || 'อัปเดตงาน' };
-                            if (isComplete) updateData.newStatus = 'Complete';
-                            else updateData.newStatus = item.status;
-                            if (file) updateData.files = [await UI.readFileAsBase64(file)];
-                            if (linkUrl) updateData.link = { url: linkUrl, label: linkLabel };
-                            handleApiCall(button, 'updateChecklistItemStatus', [AppState.currentProject.projectId, updateData], !isComplete);
-                        };
-
-                        document.getElementById('swal-update-progress-btn')?.addEventListener('click', (e) => handleProgressUpdate(e.currentTarget, false));
-                        document.getElementById('swal-checklist-complete-btn')?.addEventListener('click', (e) => handleProgressUpdate(e.currentTarget, true));
-
-                        document.getElementById('swal-edit-task-btn')?.addEventListener('click', async () => {
-                            const { value: formValues } = await Swal.fire({
-                                title: 'แก้ไขงานย่อย',
-                                html: `<input id="swal-edit-text" class="swal2-input" value="${item.text}"><input type="date" id="swal-edit-duedate" class="swal2-input" value="${item.dueDate || ''}">`,
-                                focusConfirm: false, showCancelButton: true, preConfirm: () => [document.getElementById('swal-edit-text').value, document.getElementById('swal-edit-duedate').value]
-                            });
-                            if (formValues) {
-                                const [newText, newDueDate] = formValues;
-                                if (!newText) return UI.showError('กรุณากรอกชื่องาน');
-                                handleApiCall(document.createElement('button'), 'editChecklistItem', [AppState.currentProject.projectId, index, newText, newDueDate], true);
-                            }
-                        });
-
-                        document.getElementById('swal-delete-task-btn')?.addEventListener('click', async () => {
-                            const { isConfirmed } = await Swal.fire({
-                                title: 'ยืนยันการลบ?', text: `คุณต้องการลบงานย่อย "${item.text}" ใช่หรือไม่?`, icon: 'warning',
-                                showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
-                                confirmButtonText: 'ใช่, ลบเลย!', cancelButtonText: 'ยกเลิก'
-                            });
-                            if (isConfirmed) {
-                                handleApiCall(document.createElement('button'), 'deleteChecklistItem', [AppState.currentProject.projectId, index]);
-                            }
-                        });
-                    };
-                    setupEventListeners(currentItem);
+            container.innerHTML = '<div id="inner-project-gantt"></div>';
+            new Gantt("#inner-project-gantt", tasks, {
+                view_mode: 'Day',
+                language: 'en',
+                bar_height: 25,
+                padding: 15,
+                on_date_change: async (task, start, end) => {
+                    const subtaskIndex = parseInt(task.id.split('-')[1]);
+                    const startDateStr = new Date(start.getTime() - (start.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                    const endDateStr = new Date(end.getTime() - (end.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                    
+                    UI.showLoading('กำลังบันทึกวันที่...');
+                    try {
+                        const response = await API.run('updateSubtaskDates', project.projectId, subtaskIndex, startDateStr, endDateStr);
+                        if (response.status === 'success') {
+                            UI.showSuccess('บันทึกสำเร็จ');
+                            App.refreshDetailView(); 
+                        } else {
+                            UI.showError(response.message);
+                            DetailView.renderGantt(AppState.currentProject); 
+                        }
+                    } catch (err) {
+                        UI.showError(err.message);
+                        DetailView.renderGantt(AppState.currentProject); 
+                    }
                 }
             });
         },
+        renderChecklist() {
+            const container = document.getElementById('checklist-container');
+            if (!container) return;
+            const checklist = AppState.currentProject.detailsData?.checklist || [];
+            container.innerHTML = checklist.length === 0 ? '<p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">ยังไม่มีงานย่อย</p>' : '';
+            checklist.forEach((item, index) => {
+                const template = document.getElementById('checklist-item-template');
+                const card = template.content.cloneNode(true).firstElementChild;
+                card.dataset.index = index;
+                card.querySelector('.item-text').textContent = item.text;
+                const statusStyle = Config.STATUS_STYLES[item.status || 'New'] || Config.STATUS_STYLES["New"];
+                
+                const statusSpan = card.querySelector('.item-status');
+                statusSpan.textContent = item.status || 'New';
+                statusSpan.className = `item-status text-[10px] font-bold py-1 px-2.5 rounded-md uppercase tracking-wide ml-2 ${statusStyle.badge}`;
+                
+                card.querySelector('.item-assignee-image').src = item.assigneeImage || Config.DEFAULT_AVATAR;
+                card.querySelector('.item-assignee-name').textContent = item.assignee || 'N/A';
+                
+                const dateEl = card.querySelector('.item-due-date');
+                if(item.dueDate) {
+                    dateEl.textContent = new Date(item.dueDate).toLocaleDateString('th-TH', { month:'short', day:'numeric'});
+                } else {
+                    dateEl.textContent = 'ไม่ระบุ';
+                    dateEl.className = 'item-due-date flex items-center text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded-md';
+                }
+
+                container.appendChild(card);
+            });
+        },
+        renderLogs() {
+            const container = document.getElementById('log-container');
+            if (!container) return;
+            const logs = AppState.currentProject.detailsData?.logs || [];
+            container.innerHTML = logs.length === 0 ? '<p class="text-gray-400 text-sm text-center py-10">ยังไม่มีประวัติการทำงาน</p>' : '';
+            [...logs].reverse().forEach(log => {
+                const template = document.getElementById('log-entry-template');
+                const entry = template.content.cloneNode(true).firstElementChild;
+                
+                const dotEl = entry.querySelector('.log-dot');
+                if (dotEl) dotEl.className = `log-dot absolute w-2.5 h-2.5 rounded-full -left-[6px] top-4 border-2 border-white shadow-sm ${UI.getUserColorClass(log.user)}`;
+
+                entry.querySelector('.log-text').innerHTML = UI.linkify(log.display_text || log.text);
+                entry.querySelector('.log-meta').textContent = `โดย ${log.user.split('@')[0]} - ${new Date(log.timestamp).toLocaleString('th-TH', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}`;
+                container.appendChild(entry);
+            });
+        },
+        addEventListeners() {
+            document.getElementById('back-to-kanban-btn')?.addEventListener('click', App.goBackToKanban);
+            
+            document.getElementById('expand-details-btn')?.addEventListener('click', () => {
+                let popupLinksHtml = '';
+                if (AppState.currentProject.projectLinks && AppState.currentProject.projectLinks.length > 0) {
+                    popupLinksHtml = '<div class="mt-4 border-t border-gray-200 pt-4 flex flex-wrap gap-2">';
+                    AppState.currentProject.projectLinks.forEach(link => {
+                        if(link.url) popupLinksHtml += `<a href="${link.url}" target="_blank" class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg border border-blue-200 hover:bg-blue-100">🔗 ${link.label || 'ลิงก์แนบ'}</a>`;
+                    });
+                    popupLinksHtml += '</div>';
+                } else if (AppState.currentProject.projectLink) {
+                    popupLinksHtml = `<div class="mt-4 border-t border-gray-200 pt-4 flex flex-wrap gap-2"><a href="${AppState.currentProject.projectLink}" target="_blank" class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg border border-blue-200 hover:bg-blue-100">🔗 ลิงก์แนบ</a></div>`;
+                }
+
+                Swal.fire({
+                    title: 'รายละเอียดงาน',
+                    html: `<div class="text-left whitespace-pre-wrap text-sm leading-relaxed max-h-[60vh] overflow-y-auto p-4 bg-gray-50 rounded-xl border border-gray-200">${UI.linkify(AppState.currentProject.details)}${popupLinksHtml}</div>`,
+                    width: '800px',
+                    showConfirmButton: true,
+                    confirmButtonText: 'ปิด',
+                    customClass: { confirmButton: 'bg-indigo-600' }
+                });
+            });
+            
+            document.getElementById('edit-initial-info-btn')?.addEventListener('click', Components.showEditInitialInfoPopup);
+            
+            document.getElementById('inline-edit-date-btn')?.addEventListener('click', () => {
+                Components.showEditProjectPopup(AppState.currentProject);
+            });
+
+            document.getElementById('updateStatusBtn')?.addEventListener('click', async () => {
+                const newStatus = document.getElementById('detail-status-select').value;
+                if (newStatus === AppState.currentProject.status) return;
+                UI.showLoading('กำลังอัปเดตสถานะ...');
+                try {
+                    const response = await API.run('updateProjectStatus', AppState.currentProject.projectId, newStatus);
+                    if (response.status === 'success') App.refreshDetailView(); 
+                    else UI.showError(response.message);
+                } catch(err) { UI.showError(err.message); }
+            });
+
+            document.getElementById('add-checklist-form')?.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const input = document.getElementById('checklist-input');
+                const assigneeSelect = document.getElementById('checklist-assignee-select');
+                const dueDateInput = document.getElementById('checklist-duedate');
+                const text = input.value.trim();
+                
+                if (!text) return;
+                UI.showLoading('กำลังสร้างงานย่อย...');
+                
+                const selectedOption = assigneeSelect.options[assigneeSelect.selectedIndex];
+                const newChecklistItem = { 
+                    text, 
+                    status: 'New', 
+                    history: [], 
+                    comments: [], 
+                    assignee: selectedOption.value, 
+                    assigneeImage: selectedOption.dataset.image, 
+                    assigneeEmail: selectedOption.dataset.email, 
+                    dueDate: dueDateInput.value 
+                };
+                
+                const newDetailsData = AppState.currentProject.detailsData || { checklist: [], logs: [] };
+                newDetailsData.checklist = newDetailsData.checklist || [];
+                newDetailsData.checklist.push(newChecklistItem);
+                
+                try {
+                    const response = await API.run('updateProjectDetails', AppState.currentProject.projectId, newDetailsData);
+                    if (response.status === 'success') { UI.showSuccess('เพิ่มงานย่อยสำเร็จ'); App.refreshDetailView(); } 
+                    else UI.showError(response.message);
+                } catch (err) { UI.showError(err.message); }
+            });
+
+            document.getElementById('add-comment-btn')?.addEventListener('click', async () => {
+                const input = document.getElementById('comment-input');
+                const text = input.value.trim();
+                if(!text) return;
+                UI.showLoading('กำลังส่งข้อความ...');
+                try {
+                    const mentionedNames = (text.match(/@(\w+)/g) || []).map(name => name.substring(1));
+                    const mentionedEmails = mentionedNames.map(name => {
+                        const admin = AppState.admins.find(a => a.name === name);
+                        return admin ? admin.email : null;
+                    }).filter(Boolean);
+                    
+                    const response = await API.run('addLog', AppState.currentProject.projectId, { 
+                        commentText: text, 
+                        type: 'comment',
+                        mentionedEmails: mentionedEmails
+                    });
+                    
+                    if (response.status === 'success') {
+                        App.refreshDetailView();
+                    } else UI.showError(response.message);
+                } catch (err) { UI.showError(err.message); }
+            });
+
+            UI.initializeMention(document.getElementById('comment-input'));
+
+            // Whiteboard Modal Logic
+            document.getElementById('open-whiteboard-btn')?.addEventListener('click', () => {
+                if (typeof window.ExcalidrawLib === 'undefined' && typeof ExcalidrawLib === 'undefined') {
+                    UI.showError('ไม่สามารถโหลดไลบรารีกระดานวาดภาพได้ กรุณารอสักครู่หรือรีเฟรชหน้าเว็บ');
+                    return;
+                }
+                
+                const modal = document.getElementById('whiteboard-modal');
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                
+                const container = document.getElementById('excalidraw-container');
+                
+                let initialElements = [];
+                const savedWhiteboard = AppState.currentProject.detailsData?.whiteboard;
+                if (savedWhiteboard) {
+                    if (AppState.currentProject.detailsData?.whiteboardCompressed) {
+                        try {
+                            const decompressed = LZString.decompressFromBase64(savedWhiteboard);
+                            initialElements = JSON.parse(decompressed);
+                        } catch (e) {
+                            console.error("Decompression failed", e);
+                            initialElements = [];
+                        }
+                    } else {
+                        initialElements = savedWhiteboard;
+                    }
+                }
+                
+                window.tempWhiteboardElements = initialElements;
+                
+                if (!window.excalidrawRoot) {
+                    window.excalidrawRoot = ReactDOM.createRoot(container);
+                }
+                
+                window.excalidrawRoot.render(
+                    React.createElement(window.ExcalidrawLib ? window.ExcalidrawLib.Excalidraw : ExcalidrawLib.Excalidraw, {
+                        initialData: { elements: window.tempWhiteboardElements },
+                        onChange: (elements) => {
+                            window.tempWhiteboardElements = elements;
+                        },
+                        langCode: "th-TH"
+                    })
+                );
+            });
+
+            document.getElementById('close-whiteboard-btn')?.addEventListener('click', () => {
+                document.getElementById('whiteboard-modal').classList.add('hidden');
+                document.getElementById('whiteboard-modal').classList.remove('flex');
+            });
+
+            document.getElementById('save-whiteboard-btn')?.addEventListener('click', async () => {
+                UI.showLoading('กำลังบันทึกกระดานวาดภาพ...');
+                try {
+                    const newDetailsData = AppState.currentProject.detailsData || { checklist: [], logs: [] };
+                    
+                    const jsonString = JSON.stringify(window.tempWhiteboardElements);
+                    const compressedData = LZString.compressToBase64(jsonString);
+                    
+                    newDetailsData.whiteboard = compressedData;
+                    newDetailsData.whiteboardCompressed = true;
+                    
+                    const fullString = JSON.stringify(newDetailsData);
+                    if (fullString.length > 49000) {
+                        throw new Error('ข้อมูลกระดานวาดภาพใหญ่เกินไป (Google Sheets รับได้สูงสุด 50,000 ตัวอักษร) กรุณาลบรูปภาพหรือเส้นที่ซับซ้อนออกบางส่วนครับ');
+                    }
+                    
+                    const response = await API.run('updateProjectDetails', AppState.currentProject.projectId, newDetailsData);
+                    
+                    if (response.status === 'success') {
+                        UI.showSuccess('บันทึกกระดานสำเร็จ!');
+                        document.getElementById('whiteboard-modal').classList.add('hidden');
+                        document.getElementById('whiteboard-modal').classList.remove('flex');
+                        AppState.currentProject.detailsData = newDetailsData; 
+                    } else {
+                        UI.showError(response.message);
+                    }
+                } catch (err) {
+                    UI.showError(err.message);
+                }
+            });
+
+            document.getElementById('checklist-container')?.addEventListener('click', (e) => {
+                const card = e.target.closest('.checklist-item');
+                if (card && card.dataset.index) {
+                    const index = parseInt(card.dataset.index);
+                    let currentItem = AppState.currentProject.detailsData.checklist[index];
+                    if (!currentItem) return;
+
+                    const generatePopupHtml = (item) => {
+                        const currentUser = AppState.currentUser;
+                        const isCurrentUserAssigned = item.assigneeEmail === currentUser.email;
+                        const projectAdmins = AppState.admins;
+
+                        const createFileHtml = (file) => {
+                            if (!file || !file.url) return '';
+                            return `<a href="${file.url}" target="_blank" class="flex items-center text-sm text-indigo-600 hover:underline bg-indigo-50 p-2 rounded-md mt-1"><svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg><span class="truncate">${file.name}</span></a>`;
+                        };
+                        const createLinkHtml = (link) => {
+                            if (!link || !link.url) return '';
+                            return `<a href="${link.url}" target="_blank" class="flex items-center text-sm text-purple-600 hover:underline bg-purple-50 p-2 rounded-md mt-1"><svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg><span class="truncate">${link.label || link.url}</span></a>`;
+                        };
+                        
+                        const createSystemLogHtml = (log) => {
+                            const filesHtml = (log.files || []).map(createFileHtml).join('');
+                            const linkHtml = log.link ? createLinkHtml(log.link) : '';
+                             return `<div class="text-xs text-gray-600 border-b border-gray-100 py-3 relative pl-4 border-l-2 ml-2">
+                                         <div class="log-dot absolute w-2.5 h-2.5 rounded-full -left-[6.5px] top-4 border-2 border-white shadow-sm ${UI.getUserColorClass(log.user)}"></div>
+                                         <p class="leading-relaxed">${UI.linkify(log.text)}</p>
+                                         <div class="mt-1 space-y-1">${filesHtml}${linkHtml}</div>
+                                         <p class="text-gray-400 text-right mt-1">- ${new Date(log.timestamp).toLocaleString('th-TH')}</p>
+                                        </div>`;
+                        };
+                        
+                        const createCommentHtml = (log) => {
+                            const isFromCurrentUser = log.user === currentUser.email;
+                            const alignmentClass = isFromCurrentUser ? 'justify-end' : 'justify-start';
+                            const bubbleClass = isFromCurrentUser ? 'bg-indigo-100 border-indigo-200' : 'bg-white border-gray-200';
+                            const userHtml = `<span class="font-semibold text-gray-700">${log.user.split('@')[0]}</span>`;
+                            const filesHtml = (log.files || []).map(createFileHtml).join('');
+                            
+                            return `<div class="flex ${alignmentClass} w-full mt-3">
+                                         <div class="max-w-xs md:max-w-md w-full">
+                                             ${!isFromCurrentUser ? `<div class="text-xs font-semibold text-gray-500 mb-1 ml-1">${userHtml}</div>` : ''}
+                                             <div class="p-3 rounded-2xl ${bubbleClass} shadow-sm border">
+                                                 <p class="text-gray-800 whitespace-pre-wrap text-sm leading-relaxed">${UI.linkify(log.text)}</p>
+                                                 <div class="mt-2 space-y-1">${filesHtml}</div>
+                                             </div>
+                                             <div class="text-gray-400 text-[10px] mt-1 ${isFromCurrentUser ? 'text-right mr-1' : 'text-left ml-1'}">
+                                                 ${new Date(log.timestamp).toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                                             </div>
+                                         </div>
+                                        </div>`;
+                        };
+                        
+                        const historyLogs = (item.history || []).filter(log => log.type !== 'comment');
+                        const commentLogs = (item.comments || []);
+                        const historyFeedHtml = historyLogs.length > 0 ? historyLogs.map(createSystemLogHtml).join('') : '<p class="text-gray-400 text-sm p-4 text-center">ไม่มีประวัติการทำงาน</p>';
+                        const conversationFeedHtml = commentLogs.length > 0 ? commentLogs.map(createCommentHtml).join('') : '<div class="flex h-full items-center justify-center"><p class="text-gray-400 text-sm">ยังไม่มีการสนทนา</p></div>';
+
+                        let actionPanelHtml = '';
+                        if (isCurrentUserAssigned && item.status !== 'New' && item.status !== 'Complete' && item.status !== 'Completed') {
+                            const selectable = Config.USER_SELECTABLE_STATUSES.filter(s => s !== 'In Progress' && s !== 'Completed');
+                            const statusOptions = selectable.map(s => `<option value="${s}">${s}</option>`).join('');
+                            const userOptions = projectAdmins.filter(a => a.email !== currentUser.email).map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+                            actionPanelHtml = `
+                                  <div class="border border-indigo-100 bg-indigo-50/50 rounded-xl mt-4">
+                                       <div id="action-panel-toggle" class="flex justify-between items-center p-3 cursor-pointer">
+                                           <h4 class="font-bold text-indigo-900 text-sm flex items-center">
+                                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                                                แผงควบคุมงาน
+                                           </h4>
+                                           <div class="flex items-center">
+                                               <button id="swal-edit-task-btn" class="text-xs text-blue-600 bg-white border border-blue-200 hover:bg-blue-50 px-2 py-1 rounded shadow-sm mr-2 z-10">แก้ไข</button>
+                                               <button id="swal-delete-task-btn" class="text-xs text-red-600 bg-white border border-red-200 hover:bg-red-50 px-2 py-1 rounded shadow-sm z-10">ลบ</button>
+                                               <svg id="action-panel-icon" class="w-5 h-5 ml-3 text-indigo-400 transition-transform transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                           </div>
+                                       </div>
+                                       <div id="action-panel-content" class="p-4 border-t border-indigo-100 space-y-4 overflow-hidden transition-all duration-500 ease-in-out" style="max-height: 0px;">
+                                           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                               <div><label class="block text-xs font-semibold text-gray-700 mb-1">เปลี่ยนสถานะ</label><div class="flex items-center"><select id="swal-change-status-select" class="block w-full p-2 border border-gray-300 bg-white rounded-lg text-sm"><option value="">-- เลือกสถานะ --</option>${statusOptions}</select><button id="swal-change-status-btn" class="ml-2 bg-yellow-500 text-white px-3 py-2 rounded-lg hover:bg-yellow-600 font-semibold text-sm flex-shrink-0">อัปเดต</button></div></div>
+                                               <div><label class="block text-xs font-semibold text-gray-700 mb-1">ส่งต่องานให้</label><div class="flex items-center"><select id="swal-forward-user-select" class="block w-full p-2 border border-gray-300 bg-white rounded-lg text-sm"><option value="">-- เลือกผู้ใช้ --</option>${userOptions}</select><button id="swal-forward-task-btn" class="ml-2 bg-indigo-500 text-white px-3 py-2 rounded-lg hover:bg-indigo-600 font-semibold text-sm flex-shrink-0">ส่งต่อ</button></div></div>
+                                           </div>
+                                           <div class="pt-2 border-t border-indigo-100/50">
+                                               <label class="block text-xs font-semibold text-gray-700 mb-1">อัปเดตความคืบหน้า / ปิดงาน</label>
+                                               <textarea id="swal-update-log" class="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" rows="2" placeholder="ระบุรายละเอียดการทำงาน..."></textarea>
+                                               <div class="grid grid-cols-2 gap-2 mt-2">
+                                                   <input type="url" id="swal-update-link-url" class="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="URL ของลิงก์">
+                                                   <input type="text" id="swal-update-link-label" class="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="ป้ายกำกับลิงก์">
+                                               </div>
+                                               <input type="file" id="swal-update-file" class="mt-2 w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                                               <div class="flex justify-end mt-3 space-x-2">
+                                                   <button id="swal-update-progress-btn" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center text-sm font-semibold"><svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3"></path></svg><span>บันทึก</span></button>
+                                                   <button id="swal-checklist-complete-btn" class="bg-emerald-500 text-white px-4 py-2 rounded-lg hover:bg-emerald-600 flex items-center text-sm font-semibold"><svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.052-.143z" clip-rule="evenodd"></path></svg><span>ปิดงาน</span></button>
+                                               </div>
+                                           </div>
+                                       </div>
+                                  </div>`;
+                        } else if (isCurrentUserAssigned && item.status === 'New') {
+                            actionPanelHtml = `<div class="mt-6 text-center"><button id="swal-checklist-accept-btn" class="bg-indigo-600 text-white px-6 py-2.5 rounded-xl hover:bg-indigo-700 font-bold text-base shadow-md hover:shadow-lg transition-all animate-pulse">รับงานนี้เพื่อเริ่มดำเนินการ</button></div>`;
+                        }
+
+                        return `<div id="checklist-popup-content" class="grid grid-cols-1 lg:grid-cols-2 gap-6 p-1 h-[75vh] min-h-[500px]">
+                                         <div class="flex flex-col h-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                             <div class="p-5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+                                                 <div class="grid grid-cols-2 gap-4">
+                                                     <div><p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">สถานะ</p><p class="font-bold text-gray-800 mt-1">${item.status}</p></div>
+                                                     <div><p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">ผู้รับผิดชอบ</p><p class="font-bold text-gray-800 mt-1">${item.assignee || 'N/A'}</p></div>
+                                                 </div>
+                                             </div>
+                                             <div class="p-5 overflow-y-auto flex-grow">
+                                                 ${actionPanelHtml}
+                                                 <div class="mt-6">
+                                                     <h4 class="text-sm font-bold text-gray-800 mb-3 border-b border-gray-100 pb-2">ประวัติการทำงาน</h4>
+                                                     <div id="swal-history-container" class="space-y-1">${historyFeedHtml}</div>
+                                                 </div>
+                                             </div>
+                                         </div>
+
+                                         <div class="flex flex-col h-full bg-slate-50 rounded-2xl border border-gray-200 overflow-hidden shadow-inner">
+                                             <div class="p-4 border-b border-gray-200 bg-white flex-shrink-0 flex items-center">
+                                                <svg class="w-5 h-5 text-indigo-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"></path></svg>
+                                                <span class="font-bold text-gray-800">การสนทนา</span>
+                                             </div>
+                                             <div id="swal-conversation-container" class="flex-grow p-4 overflow-y-auto">
+                                                 ${conversationFeedHtml}
+                                             </div>
+                                             <div class="p-4 bg-white border-t border-gray-200 flex-shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                                                 <textarea id="swal-checklist-comment" rows="2" class="w-full p-3 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none" placeholder="พิมพ์ข้อความ..."></textarea>
+                                                 <div class="flex justify-between items-center mt-3">
+                                                     <input type="file" id="swal-comment-file" class="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 cursor-pointer"/>
+                                                     <button id="swal-checklist-comment-btn" class="bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 flex items-center flex-shrink-0 text-sm font-semibold transition-colors shadow-sm">
+                                                         <span>ส่งข้อความ</span>
+                                                         <svg class="w-4 h-4 ml-1.5" fill="currentColor" viewBox="0 0 20 20"><path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.949a.75.75 0 00.95.574l3.11-1.555a.75.75 0 000-1.338L3.23.863a.75.75 0 00-.125-.074zM10.23 8.863a.75.75 0 00.125.074l7.08 3.54a.75.75 0 00.826-.95l-1.414-4.949a.75.75 0 00-.95-.574l-3.11 1.555a.75.75 0 000 1.338z"></path></svg>
+                                                     </button>
+                                                 </div>
+                                             </div>
+                                         </div>
+                                        </div>`;
+                    };
+
+                    Swal.fire({
+                        title: `<span class="text-xl font-bold text-gray-900 px-2">${currentItem.text}</span>`,
+                        html: generatePopupHtml(currentItem),
+                        showCloseButton: true,
+                        showConfirmButton: false,
+                        width: '95vw',
+                        customClass: { popup: 'rounded-3xl' },
+                        didOpen: () => {
+                            const setupEventListeners = (item) => {
+                                UI.initializeMention(document.getElementById('swal-checklist-comment'));
+                                
+                                const handleApiCall = async (button, action, params, isDynamicUpdate = false) => {
+                                    const originalContent = button.innerHTML;
+                                    button.disabled = true;
+                                    button.innerHTML = 'กำลังประมวลผล...';
+                                    try {
+                                        const response = await API.run(action, ...params);
+                                        if (response.status === 'success') {
+                                            if (isDynamicUpdate && response.data) {
+                                                AppState.currentProject.detailsData.checklist[index] = response.data;
+                                                currentItem = response.data;
+                                                DetailView.renderChecklist();
+                                                const newHtml = generatePopupHtml(currentItem);
+                                                const contentWrapper = Swal.getHtmlContainer();
+                                                if(contentWrapper) {
+                                                    contentWrapper.innerHTML = newHtml;
+                                                    setupEventListeners(currentItem);
+                                                    const chatContainer = document.getElementById('swal-conversation-container');
+                                                    if(chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+                                                }
+                                            } else {
+                                                Swal.close();
+                                                App.refreshDetailView();
+                                            }
+                                        } else {
+                                            UI.showError(response.message);
+                                            if(button && document.body.contains(button)) {
+                                                button.disabled = false;
+                                                button.innerHTML = originalContent;
+                                            }
+                                        }
+                                    } catch (err) {
+                                        UI.showError(err.message);
+                                        if(button && document.body.contains(button)) {
+                                            button.disabled = false;
+                                            button.innerHTML = originalContent;
+                                        }
+                                    }
+                                };
+                                
+                                document.getElementById('action-panel-toggle')?.addEventListener('click', (e) => {
+                                    if (e.target.closest('#swal-edit-task-btn') || e.target.closest('#swal-delete-task-btn')) return;
+                                    const content = document.getElementById('action-panel-content');
+                                    const icon = document.getElementById('action-panel-icon');
+                                    if (content) {
+                                        if (content.style.maxHeight && content.style.maxHeight !== "0px") {
+                                            content.style.maxHeight = "0px";
+                                            content.classList.remove('mt-4', 'p-4', 'border-t');
+                                            icon.classList.remove('rotate-180');
+                                        } else {
+                                            content.style.maxHeight = content.scrollHeight + "px";
+                                            content.classList.add('mt-4', 'p-4', 'border-t');
+                                            icon.classList.add('rotate-180');
+                                        }
+                                    }
+                                });
+
+                                document.getElementById('swal-checklist-comment-btn')?.addEventListener('click', async (e) => {
+                                    const button = e.currentTarget;
+                                    const input = document.getElementById('swal-checklist-comment');
+                                    const fileInput = document.getElementById('swal-comment-file');
+                                    const text = input.value.trim();
+                                    const file = fileInput.files[0];
+                                    if (!text && !file) return UI.showError('กรุณาพิมพ์ข้อความหรือแนบไฟล์');
+                                    
+                                    const commentData = { 
+                                        checklistIndex: index, 
+                                        commentText: text || 'ส่งไฟล์แนบ',
+                                        mentionedEmails: (text.match(/@([\w.]+)/g) || []).map(name => {
+                                            const admin = AppState.admins.find(a => a.name === name.substring(1));
+                                            return admin ? admin.email : null;
+                                        }).filter(Boolean)
+                                    };
+                                    if (file) commentData.files = [await UI.readFileAsBase64(file)];
+                                    handleApiCall(button, 'addCommentToChecklistItem', [AppState.currentProject.projectId, commentData], true);
+                                });
+
+                                document.getElementById('swal-checklist-accept-btn')?.addEventListener('click', (e) => handleApiCall(e.target, 'acceptChecklistTask', [AppState.currentProject.projectId, index], true));
+                                
+                                document.getElementById('swal-change-status-btn')?.addEventListener('click', (e) => {
+                                    const newStatus = document.getElementById('swal-change-status-select').value;
+                                    if (!newStatus) return UI.showError('กรุณาเลือกสถานะที่ต้องการเปลี่ยน');
+                                    handleApiCall(e.target, 'updateChecklistItemStatus', [AppState.currentProject.projectId, { checklistIndex: index, newStatus, logText: `เปลี่ยนสถานะเป็น ${newStatus}` }], true);
+                                });
+
+                                document.getElementById('swal-forward-task-btn')?.addEventListener('click', (e) => {
+                                    const assigneeName = document.getElementById('swal-forward-user-select').value;
+                                    if (!assigneeName) return UI.showError('กรุณาเลือกผู้ใช้ที่ต้องการส่งต่องาน');
+                                    handleApiCall(e.target, 'assignChecklistItem', [AppState.currentProject.projectId, index, assigneeName], true);
+                                });
+                                
+                                const handleProgressUpdate = async (button, isComplete) => {
+                                    const logInput = document.getElementById('swal-update-log');
+                                    const fileInput = document.getElementById('swal-update-file');
+                                    const linkUrlInput = document.getElementById('swal-update-link-url');
+                                    const linkLabelInput = document.getElementById('swal-update-link-label');
+                                    const logText = logInput.value.trim();
+                                    const file = fileInput.files[0];
+                                    const linkUrl = linkUrlInput.value.trim();
+                                    const linkLabel = linkLabelInput.value.trim();
+                                    if (!logText && !file && !linkUrl) return UI.showError('กรุณาระบุรายละเอียด, แนบไฟล์ หรือแนบลิงก์');
+                                    
+                                    const updateData = { checklistIndex: index, logText: logText || 'อัปเดตงาน' };
+                                    if (isComplete) updateData.newStatus = 'Complete';
+                                    else updateData.newStatus = item.status;
+                                    if (file) updateData.files = [await UI.readFileAsBase64(file)];
+                                    if (linkUrl) updateData.link = { url: linkUrl, label: linkLabel };
+                                    handleApiCall(button, 'updateChecklistItemStatus', [AppState.currentProject.projectId, updateData], !isComplete);
+                                };
+
+                                document.getElementById('swal-update-progress-btn')?.addEventListener('click', (e) => handleProgressUpdate(e.currentTarget, false));
+                                document.getElementById('swal-checklist-complete-btn')?.addEventListener('click', (e) => handleProgressUpdate(e.currentTarget, true));
+
+                                document.getElementById('swal-edit-task-btn')?.addEventListener('click', async () => {
+                                    const { value: formValues } = await Swal.fire({
+                                        title: 'แก้ไขงานย่อย',
+                                        html: `<input id="swal-edit-text" class="w-full p-2 border rounded-md mb-3" value="${item.text}"><label class="block text-left text-sm mb-1">กำหนดส่ง:</label><input type="date" id="swal-edit-duedate" class="w-full p-2 border rounded-md" value="${item.dueDate || ''}">`,
+                                        focusConfirm: false, showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'ยกเลิก',
+                                        customClass: { confirmButton: 'bg-indigo-600', cancelButton: 'bg-gray-400' },
+                                        preConfirm: () => [document.getElementById('swal-edit-text').value, document.getElementById('swal-edit-duedate').value]
+                                    });
+                                    if (formValues) {
+                                        const [newText, newDueDate] = formValues;
+                                        if (!newText) return UI.showError('กรุณากรอกชื่องาน');
+                                        handleApiCall(document.createElement('button'), 'editChecklistItem', [AppState.currentProject.projectId, index, newText, newDueDate], true);
+                                    }
+                                });
+
+                                document.getElementById('swal-delete-task-btn')?.addEventListener('click', async () => {
+                                    const { isConfirmed } = await Swal.fire({
+                                        title: 'ยืนยันการลบ?', text: `คุณต้องการลบงานย่อย "${item.text}" ใช่หรือไม่?`, icon: 'warning',
+                                        showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#9ca3af',
+                                        confirmButtonText: 'ใช่, ลบเลย!', cancelButtonText: 'ยกเลิก'
+                                    });
+                                    if (isConfirmed) {
+                                        handleApiCall(document.createElement('button'), 'deleteChecklistItem', [AppState.currentProject.projectId, index]);
+                                    }
+                                });
+                            };
+                            
+                            setupEventListeners(currentItem);
+                            setTimeout(() => {
+                                const chatContainer = document.getElementById('swal-conversation-container');
+                                if(chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+                            }, 100);
+                        }
+                    });
+                }
+            });
+        }
     };
 
     const KanbanBoard = {
@@ -622,18 +1568,30 @@ document.addEventListener('DOMContentLoaded', () => {
             if (selectedUser !== 'all') filteredProjects = filteredProjects.filter(p => p.assignedTo === selectedUser);
             if (searchTerm) filteredProjects = filteredProjects.filter(p => p.projectName.toLowerCase().includes(searchTerm));
             KanbanBoard.render(filteredProjects);
+            if(!DOMElements.ganttView.classList.contains('hidden')) GanttView.render();
+            if(!DOMElements.calendarView.classList.contains('hidden')) CalendarView.render();
         },
         render(projectsToRender) {
             DOMElements.skeletonLoader.classList.add('hidden');
             DOMElements.kanbanContainer.innerHTML = '';
             const groupedProjects = projectsToRender.reduce((acc, p) => { (acc[p.status] = acc[p.status] || []).push(p); return acc; }, {});
             const statusesToRender = Config.STATUS_ORDER.filter(status => status !== 'Wait for Review' || (groupedProjects[status] && groupedProjects[status].length > 0));
+            
             statusesToRender.forEach(status => {
                 const projectsInStatus = groupedProjects[status] || [];
-                const style = Config.STATUS_STYLES[status] || Config.STATUS_STYLES["New"];
                 const column = document.createElement('div');
-                column.className = "flex-shrink-0 w-80 h-full";
-                column.innerHTML = `<div class="bg-slate-100 rounded-xl h-full flex flex-col" data-status="${status}"><div class="flex justify-between items-center p-4 border-b-4 ${style.border}"><h2 class="text-lg font-bold ${style.text}">${status}</h2><span class="text-sm font-semibold ${style.bg} ${style.text} px-3 py-1 rounded-full">${projectsInStatus.length}</span></div><div class="cards-container p-2 space-y-3 overflow-y-auto flex-grow">${projectsInStatus.length === 0 ? '<div class="text-center p-10"><p class="text-gray-500 text-sm">ไม่มีรายการ</p></div>' : ''}</div></div>`;
+                column.className = "flex-shrink-0 w-[340px] h-full pb-4";
+                
+                column.innerHTML = `
+                    <div class="bg-gray-100/50 rounded-2xl h-full flex flex-col border border-gray-100" data-status="${status}">
+                        <div class="flex justify-between items-center p-4">
+                            <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wider">${status}</h2>
+                            <span class="text-xs font-bold bg-white text-gray-500 px-2.5 py-1 rounded-lg border border-gray-200 shadow-sm">${projectsInStatus.length}</span>
+                        </div>
+                        <div class="cards-container px-3 pb-3 space-y-3 overflow-y-auto flex-grow">
+                            ${projectsInStatus.length === 0 ? '<div class="text-center p-6 border-2 border-dashed border-gray-200 rounded-xl m-2"><p class="text-gray-400 text-sm font-medium">ลากการ์ดมาวางที่นี่</p></div>' : ''}
+                        </div>
+                    </div>`;
                 const cardsContainer = column.querySelector('.cards-container');
                 projectsInStatus.sort((a,b) => new Date(b.rawTimestamp) - new Date(a.rawTimestamp)).forEach(p => cardsContainer.appendChild(Components.createProjectCard(p)));
                 DOMElements.kanbanContainer.appendChild(column);
@@ -649,7 +1607,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     UI.showLoading('กำลังอัปเดตสถานะ...');
                     try {
                         const response = await API.run('updateProjectStatus', projectId, newStatus);
-                        if (response.status === 'success') { UI.showSuccess('อัปเดตสถานะสำเร็จ'); await App.loadInitialData(); }
+                        if (response.status === 'success') { UI.showSuccess('อัปเดตสำเร็จ'); await App.loadInitialData(); }
                         else { UI.showError(response.message); this.render(AppState.projects); }
                     } catch(err) { UI.showError(err.message); this.render(AppState.projects); }
                 }
@@ -657,306 +1615,34 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         handleDragStart(e) {
             const card = e.target.closest('[data-project-id][draggable="true"]');
-            if (card) { this.draggedItem = card; e.dataTransfer.setData('text/plain', card.dataset.projectId); e.dataTransfer.setData('text/x-old-status', card.dataset.status); setTimeout(() => card.classList.add('opacity-50'), 0); }
+            if (card) { this.draggedItem = card; e.dataTransfer.setData('text/plain', card.dataset.projectId); e.dataTransfer.setData('text/x-old-status', card.dataset.status); setTimeout(() => card.classList.add('opacity-50', 'scale-95'), 0); }
         },
         handleDragOver(e) { const column = e.target.closest('[data-status]'); if (column && this.draggedItem) { e.preventDefault(); column.classList.add('drag-over'); } },
         handleDragLeave(e) { const column = e.target.closest('[data-status]'); if (column) column.classList.remove('drag-over'); },
-        handleDragEnd() { document.querySelectorAll('.opacity-50').forEach(el => el.classList.remove('opacity-50')); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); this.draggedItem = null; }
+        handleDragEnd() { document.querySelectorAll('.opacity-50').forEach(el => el.classList.remove('opacity-50', 'scale-95')); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); this.draggedItem = null; }
     };
-    
+
     const CalendarView = {
         init() {},
-        render() {
+        render() { 
             const container = DOMElements.calendarView;
-            container.innerHTML = '';
-
-            const header = this.createHeader();
-            const grid = this.createGrid();
-            
-            container.appendChild(header);
-            container.appendChild(grid);
-            
-            this.addEventListeners();
-        },
-        createHeader() {
-            const header = document.createElement('div');
-            header.className = 'flex items-center justify-between mb-4';
-
-            const monthYear = document.createElement('h2');
-            monthYear.className = 'text-xl font-bold';
-            monthYear.textContent = AppState.currentCalendarDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
-
-            const navButtons = document.createElement('div');
-            navButtons.className = 'flex items-center space-x-2';
-            navButtons.innerHTML = `
-                <button id="prev-month-btn" class="p-2 rounded-full hover:bg-gray-100"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
-                <button id="next-month-btn" class="p-2 rounded-full hover:bg-gray-100"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>
-            `;
-            
-            header.appendChild(monthYear);
-            header.appendChild(navButtons);
-            return header;
-        },
-        createGrid() {
-            const grid = document.createElement('div');
-            grid.className = 'calendar-grid';
-
-            const daysOfWeek = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
-            daysOfWeek.forEach(day => {
-                grid.innerHTML += `<div class="calendar-day-header">${day}</div>`;
-            });
-
-            const date = AppState.currentCalendarDate;
-            const year = date.getFullYear();
-            const month = date.getMonth();
-
-            const firstDayOfMonth = new Date(year, month, 1);
-            const lastDayOfMonth = new Date(year, month + 1, 0);
-            const startDayOfWeek = firstDayOfMonth.getDay();
-            
-            for (let i = 0; i < startDayOfWeek; i++) {
-                grid.innerHTML += `<div class="calendar-day calendar-day-other-month"></div>`;
-            }
-
-            for (let day = 1; day <= lastDayOfMonth.getDate(); day++) {
-                const currentDate = new Date(year, month, day);
-                const today = new Date();
-                const isToday = currentDate.toDateString() === today.toDateString();
-                const dayCell = document.createElement('div');
-                dayCell.className = `calendar-day ${isToday ? 'calendar-day-today' : ''}`;
-                dayCell.innerHTML = `<div class="calendar-day-number">${day}</div>`;
-                
-                this.renderTasksForDay(dayCell, currentDate);
-
-                grid.appendChild(dayCell);
-            }
-            return grid;
-        },
-        renderTasksForDay(cell, date) {
-            AppState.projects.forEach(project => {
-                project.detailsData.checklist.forEach(item => {
-                    if (!item.dueDate) return;
-                    const dueDate = new Date(item.dueDate);
-                    if (dueDate.toDateString() === date.toDateString()) {
-                        const taskEl = document.createElement('div');
-                        const style = Config.STATUS_STYLES[item.status] || Config.STATUS_STYLES['New'];
-                        taskEl.className = `calendar-task ${style.bg}`;
-                        taskEl.textContent = item.text;
-                        taskEl.title = `${project.projectName}: ${item.text}`;
-                        taskEl.addEventListener('click', () => App.openDetailView(project.projectId));
-                        cell.appendChild(taskEl);
-                    }
-                });
-            });
-        },
-        addEventListeners() {
-            document.getElementById('prev-month-btn')?.addEventListener('click', () => {
-                AppState.currentCalendarDate.setMonth(AppState.currentCalendarDate.getMonth() - 1);
-                this.render();
-            });
-            document.getElementById('next-month-btn')?.addEventListener('click', () => {
-                AppState.currentCalendarDate.setMonth(AppState.currentCalendarDate.getMonth() + 1);
-                this.render();
-            });
+            container.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500 font-medium">ส่วนปฏิทิน (Calendar View) อยู่ระหว่างการพัฒนาครับ</div>';
         }
-    };
-
-    const DetailView = {
-        render(project) {
-            AppState.currentProject = project;
-            DOMElements.detailView.innerHTML = this.generateMainHTML(project);
-            this.renderChecklist();
-            this.renderLogs();
-            this.renderActionButtons();
-            this.startCountdown();
-            this.addEventListeners();
-        },
-        generateMainHTML(project) {
-            const dueDate = project.projectDueDate ? new Date(project.projectDueDate).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : 'ยังไม่ได้ระบุ';
-            let adminOptions = '<option value="" data-image="" data-email="">-- มอบหมายให้ --</option>';
-            AppState.admins.forEach(admin => adminOptions += `<option value="${admin.name}" data-image="${admin.imageUrl}" data-email="${admin.email}">${admin.name}</option>`);
-            
-            const initialInfoHTML = this.generateInitialInfoHTML(project);
-
-            return `<div class="h-full flex flex-col p-4 sm:p-6"><div class="flex justify-between items-start mb-4 pb-4 border-b"><div><div class="flex items-center gap-x-3"><h2 id="detail-project-name" class="text-2xl lg:text-3xl font-bold text-gray-900">${project.projectName}</h2><button id="edit-project-btn" title="แก้ไขชื่องานและกำหนดส่ง" class="text-gray-400 hover:text-blue-600 p-1 rounded-full hover:bg-gray-100 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z"></path></svg></button></div><p class="text-gray-500 mt-1 text-sm">ผู้รับผิดชอบ: ${project.assignedTo || 'N/A'}</p><p id="detail-due-date" class="text-gray-500 mt-1 text-sm">กำหนดส่ง: ${dueDate} | เวลาที่เหลือ: <span id="countdown-timer" class="font-semibold">-</span></p></div><button id="back-to-kanban-btn" class="bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 border border-gray-300 rounded-lg shadow-sm">กลับ</button></div><div id="action-bar" class="flex flex-wrap items-end gap-4 mb-6 p-4 bg-gray-100 rounded-xl"></div><div class="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-y-auto"><div class="lg:col-span-2 space-y-6">${initialInfoHTML}<div class="bg-white p-6 rounded-xl border"><h3 class="text-xl font-bold mb-4 text-gray-900">ขั้นตอนการทำงาน (Checklist)</h3><form id="add-checklist-form" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-center p-3 bg-gray-50 rounded-md mb-4 border"><input type="text" id="checklist-input" class="lg:col-span-2 p-2 border rounded-md" placeholder="เพิ่มงานย่อยใหม่..."><input type="text" id="checklist-duedate" class="p-2 border rounded-md text-gray-500" placeholder="กำหนดส่ง (ถ้ามี)" onfocus="this.type='date'" onblur="if(!this.value) this.type='text'"><select id="checklist-assignee-select" class="p-2 border rounded-md">${adminOptions}</select><button type="submit" class="lg:col-span-4 w-full bg-slate-600 text-white px-4 py-2 rounded-md hover:bg-slate-700">เพิ่มงานย่อย</button></form><div id="checklist-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div></div></div><div class="lg:col-span-1 bg-white p-6 rounded-xl border h-full flex flex-col"><h3 class="text-xl font-bold mb-4 text-gray-900">ประวัติและคอมเมนต์</h3><div id="log-container" class="space-y-2 flex-grow overflow-y-auto pr-2"></div><div class="mt-4 pt-4 border-t border-gray-200"><textarea id="comment-input" rows="2" class="w-full flex-grow p-2 border rounded-md resize-none" placeholder="แสดงความคิดเห็น..."></textarea><div class="flex justify-end mt-2"><button id="add-comment-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">ส่ง</button></div></div></div></div></div>`;
-        },
-        generateInitialInfoHTML(project) {
-            const creationLog = project.detailsData.logs.find(log => log.type === 'project_creation');
-            const initialFiles = creationLog?.files || [];
-            
-            const filesHTML = initialFiles.map(file => 
-                `<a href="${file.url}" target="_blank" class="flex items-center text-sm text-blue-600 hover:underline bg-blue-50 p-2 rounded-md mt-1">
-                    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
-                    <span class="truncate">${file.name}</span>
-                </a>`
-            ).join('');
-
-            const linksHTML = project.projectLinks.map(link =>
-                `<a href="${link.url}" target="_blank" class="flex items-center text-sm text-purple-600 hover:underline bg-purple-50 p-2 rounded-md mt-1">
-                    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
-                    <span class="truncate">${link.label || link.url}</span>
-                </a>`
-            ).join('');
-
-            return `<div class="bg-white p-6 rounded-xl border">
-                        <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-xl font-bold text-gray-900">รายละเอียดเริ่มต้น</h3>
-                            <button id="edit-initial-info-btn" title="แก้ไขข้อมูลเริ่มต้น" class="text-gray-400 hover:text-blue-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z"></path></svg>
-                            </button>
-                        </div>
-                        <p class="text-gray-700 whitespace-pre-wrap">${project.details || 'ไม่มีรายละเอียด'}</p>
-                        <div class="mt-3 space-y-1">${linksHTML}${filesHTML}</div>
-                    </div>`;
-        },
-        renderChecklist() {
-            const container = document.getElementById('checklist-container');
-            if (!container) return;
-            const checklist = AppState.currentProject.detailsData.checklist || [];
-            container.innerHTML = checklist.length === 0 ? '<p class="text-gray-500 md:col-span-2">ยังไม่มีงานย่อย</p>' : '';
-            if (checklist.length > 0) {
-                checklist.forEach((item, index) => {
-                    const template = document.getElementById('checklist-item-template');
-                    const card = template.content.cloneNode(true).firstElementChild;
-                    const statusStyle = Config.STATUS_STYLES[item.status || 'New'] || {bg: "bg-gray-200", text: "text-gray-800"};
-                    card.dataset.index = index;
-                    card.querySelector('.item-text').textContent = item.text;
-                    const statusSpan = card.querySelector('.item-status');
-                    statusSpan.textContent = item.status || 'New';
-                    statusSpan.className = 'item-status text-xs font-semibold py-1 px-2 rounded-full cursor-pointer ' + statusStyle.bg + ' ' + statusStyle.text;
-                    card.querySelector('.item-assignee-image').src = item.assigneeImage || Config.DEFAULT_AVATAR;
-                    card.querySelector('.item-assignee-name').textContent = item.assignee || 'N/A';
-                    container.appendChild(card);
-                });
-            }
-        },
-        renderLogs() {
-            const container = document.getElementById('log-container');
-            if (!container) return;
-            const logs = AppState.currentProject.detailsData.logs || [];
-            container.innerHTML = logs.length === 0 ? '<p class="text-gray-500">ยังไม่มีประวัติ</p>' : '';
-            if(logs.length > 0) {
-                [...logs].reverse().forEach(log => {
-                    const template = document.getElementById('log-entry-template');
-                    const entry = template.content.cloneNode(true).firstElementChild;
-                    entry.querySelector('.log-text').innerHTML = UI.linkify(log.display_text || log.text);
-                    entry.querySelector('.log-meta').textContent = `โดย ${log.user.split('@')[0]} - ${new Date(log.timestamp).toLocaleString('th-TH')}`;
-                    container.appendChild(entry);
-                    container.appendChild(document.createElement('hr'));
-                });
-            }
-        },
-        renderActionButtons() {
-            const container = document.getElementById('action-bar');
-            if (!container) return;
-            const project = AppState.currentProject, user = AppState.currentUser;
-            const isAssignee = project.assignedTo === user.name;
-            const isTeamProject = project.assignedTo === 'Team' || project.assignedTo === 'bot';
-            const canTakeAction = isAssignee || isTeamProject;
-
-            if (canTakeAction && project.status !== 'Completed') {
-                const statusOptions = Config.USER_SELECTABLE_STATUSES
-                    .map(s => `<option value="${s}" ${s === project.status ? 'selected' : ''}>${s}</option>`)
-                    .join('');
-
-                container.innerHTML = `
-                    <div>
-                        <label class="text-sm font-medium text-gray-600">เปลี่ยนสถานะงาน:</label>
-                        <select id="detail-status-select" class="w-full mt-1 bg-white border border-gray-300 text-gray-700 py-2 px-4 pr-8 rounded-lg">
-                            ${statusOptions}
-                        </select>
-                    </div>
-                    <div class="flex items-end">
-                        <button id="updateStatusBtn" class="bg-blue-600 text-white px-6 py-2 rounded-lg h-10 font-bold hover:bg-blue-700">
-                            อัปเดตสถานะ
-                        </button>
-                    </div>`;
-            } else {
-                container.innerHTML = `<p class="text-gray-700">สถานะปัจจุบัน: <strong>${project.status}</strong></p>`;
-            }
-        },
-        startCountdown() {
-            if (AppState.countdownInterval) clearInterval(AppState.countdownInterval);
-            const timerElement = document.getElementById('countdown-timer');
-            if (!timerElement || !AppState.currentProject.projectDueDate) { if(timerElement) timerElement.textContent = '-'; return; }
-            const update = () => {
-                const now = new Date(); now.setHours(0,0,0,0);
-                const dueDate = new Date(AppState.currentProject.projectDueDate);
-                const diffDays = Math.ceil((dueDate - now) / 864e5);
-                timerElement.classList.remove('text-red-500', 'text-green-600', 'text-yellow-600');
-                if (diffDays < 0) { timerElement.textContent = `เลยกำหนด ${Math.abs(diffDays)} วัน`; timerElement.classList.add('text-red-500'); }
-                else if (diffDays === 0) { timerElement.textContent = 'วันนี้'; timerElement.classList.add('text-yellow-600'); }
-                else { timerElement.textContent = `${diffDays + 1} วัน`; timerElement.classList.add('text-green-600'); }
-            };
-            update(); AppState.countdownInterval = setInterval(update, 1000 * 60 * 60);
-        },
-        addEventListeners() {
-            document.getElementById('back-to-kanban-btn')?.addEventListener('click', App.goBackToKanban);
-            document.getElementById('edit-project-btn')?.addEventListener('click', Components.showEditProjectPopup);
-            document.getElementById('edit-initial-info-btn')?.addEventListener('click', Components.showEditInitialInfoPopup);
-            document.getElementById('add-checklist-form')?.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const input = document.getElementById('checklist-input'), assigneeSelect = document.getElementById('checklist-assignee-select'), dueDateInput = document.getElementById('checklist-duedate'), text = input.value.trim();
-                if (!text) return;
-                UI.showLoading('กำลังเพิ่มงานย่อย...');
-                const selectedOption = assigneeSelect.options[assigneeSelect.selectedIndex];
-                const newChecklistItem = { text, status: 'New', history: [], comments: [], assignee: selectedOption.value, assigneeImage: selectedOption.dataset.image, assigneeEmail: selectedOption.dataset.email, dueDate: dueDateInput.value };
-                const newDetailsData = AppState.currentProject.detailsData;
-                newDetailsData.checklist.push(newChecklistItem);
-                try {
-                    const response = await API.run('updateProjectDetails', AppState.currentProject.projectId, newDetailsData);
-                    if (response.status === 'success') { UI.showSuccess('เพิ่มงานย่อยสำเร็จ'); App.refreshDetailView(); } else UI.showError(response.message);
-                } catch (err) { UI.showError(err.message); }
-            });
-            document.getElementById('add-comment-btn')?.addEventListener('click', async () => {
-                const input = document.getElementById('comment-input'), text = input.value.trim();
-                if(!text) return;
-                UI.showLoading('กำลังส่งคอมเมนต์...');
-                try {
-                    const mentionedNames = (text.match(/@(\w+)/g) || []).map(name => name.substring(1));
-                    const mentionedEmails = mentionedNames.map(name => getEmailByUserName(name)).filter(Boolean);
-                    const response = await API.run('addLog', AppState.currentProject.projectId, { 
-                        commentText: text, 
-                        type: 'comment',
-                        mentionedEmails: mentionedEmails
-                    });
-                    if (response.status === 'success') App.refreshDetailView(); 
-                    else UI.showError(response.message);
-                } catch (err) { 
-                    UI.showError(err.message); 
-                }
-            });
-            
-            UI.initializeMention(document.getElementById('comment-input'));
-
-            document.getElementById('updateStatusBtn')?.addEventListener('click', async () => {
-                const newStatus = document.getElementById('detail-status-select').value;
-                if(newStatus === AppState.currentProject.status) return;
-                UI.showLoading('กำลังอัปเดตสถานะ...');
-                try {
-                    const response = await API.run('updateProjectStatus', AppState.currentProject.projectId, newStatus);
-                    if (response.status === 'success') App.refreshDetailView(); else UI.showError(response.message);
-                } catch(err) { UI.showError(err.message); }
-            });
-
-            document.getElementById('checklist-container')?.addEventListener('click', (e) => {
-                const card = e.target.closest('.checklist-item');
-                if (card && card.dataset.index) {
-                    Components.showChecklistDetail(parseInt(card.dataset.index));
-                }
-            });
-        },
     };
 
     const App = {
         init() {
-            // This function is no longer needed as DOMElements is initialized directly.
+            PersonalTodo.init(); 
             
-            if ('serviceWorker' in navigator) navigator.serviceWorker.register(URL.createObjectURL(new Blob([`self.addEventListener('fetch', () => {});`], {type: 'application/javascript'})));
             DOMElements.addProjectBtn.addEventListener('click', () => Components.showAddProject());
+            DOMElements.settingsBtn?.addEventListener('click', () => Components.showSettingsPopup());
             
             DOMElements.kanbanViewBtn.addEventListener('click', () => {
                 UI.showView('kanban');
+            });
+            DOMElements.ganttViewBtn.addEventListener('click', () => {
+                UI.showView('gantt');
+                GanttView.render();
             });
             DOMElements.calendarViewBtn.addEventListener('click', () => {
                 UI.showView('calendar');
@@ -973,20 +1659,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await API.run('getInitialData');
                 AppState.projects = data.projects.status === 'success' ? data.projects.data : [];
                 AppState.admins = data.admins.status === 'success' ? data.admins.data : [];
-                AppState.unreadProjectIds = []; // Always empty now
+                
                 const adminData = AppState.admins.find(a => a.email === data.currentUser.email);
                 AppState.currentUser = { ...data.currentUser, imageUrl: adminData?.imageUrl || Config.DEFAULT_AVATAR };
+                
                 this.populateUserFilter();
+                
                 if (projectIdToOpen) {
                     this.openDetailView(projectIdToOpen);
                 } else {
-                    const currentView = DOMElements.calendarView.classList.contains('hidden') ? 'kanban' : 'calendar';
+                    const currentView = !DOMElements.ganttView.classList.contains('hidden') ? 'gantt' : 'kanban';
                     UI.showView(currentView);
-                    if (currentView === 'kanban') {
-                        KanbanBoard.applyFiltersAndSearch();
-                    } else {
-                        CalendarView.render();
-                    }
+                    KanbanBoard.applyFiltersAndSearch(); 
                 }
                 Swal.close();
             } catch (error) { UI.showError(error.message); }
@@ -1002,7 +1686,7 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         async openDetailView(projectId) {
             UI.showView('detail');
-            UI.showLoading('กำลังโหลดโปรเจกต์...');
+            UI.showLoading('กำลังจัดเตรียมข้อมูล...');
             try {
                 let project = AppState.projects.find(p => p.projectId === projectId);
                 if (!project) {
@@ -1012,7 +1696,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 DetailView.render(project);
                 Swal.close();
-                // Removed mark as read logic
             } catch(err) { UI.showError(err.message); this.goBackToKanban(); }
         },
         goBackToKanban() {
@@ -1020,9 +1703,8 @@ document.addEventListener('DOMContentLoaded', () => {
             KanbanBoard.applyFiltersAndSearch();
             window.history.pushState({}, document.title, window.location.pathname);
         },
-        async refreshDetailView() {
+        async refreshDetailView() { 
             if (!AppState.currentProject) return;
-            UI.showLoading('กำลังรีเฟรช...');
             try {
                 const projectId = AppState.currentProject.projectId;
                 const response = await API.run('getProjectById', projectId);
@@ -1037,14 +1719,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 UI.showError(err.message);
             }
-        },
+         }
     };
-
-    function getEmailByUserName(name) {
-        if (!name) return null;
-        const admin = AppState.admins.find(a => a.name === name.trim());
-        return admin ? admin.email : null;
-    }
 
     // --- APP INITIALIZATION ---
     App.init();
