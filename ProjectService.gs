@@ -23,7 +23,9 @@ function getProjectById(projectId) {
 }
 
 function updateProjectStatus(projectId, newStatus) {
-  const allowedStatuses = ["New", "In Progress", "On Hold", "Incomplete", "Completed"];
+  // เพิ่ม "Change Request" เข้าไปในรายการที่อนุญาตให้เปลี่ยนได้
+  const allowedStatuses = ["New", "In Progress", "Change Request", "On Hold", "Incomplete", "Completed"];
+  
   if (!allowedStatuses.includes(newStatus)) {
     return { status: 'error', message: `ไม่สามารถเปลี่ยนเป็นสถานะ '${newStatus}' ได้` };
   }
@@ -51,6 +53,7 @@ function updateProjectStatus(projectId, newStatus) {
     const detailsDataCell = sheet.getRange(rowIndex, COL.DETAILS_DATA);
     const detailsData = JSON.parse(detailsDataCell.getValue() || '{"logs":[]}');
     const logText = `[สถานะโครงการ] เปลี่ยนจาก '${oldStatus}' เป็น '${newStatus}'`;
+    
     detailsData.logs.push({
       text: logText,
       display_text: logText,
