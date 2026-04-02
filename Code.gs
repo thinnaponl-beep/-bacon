@@ -37,7 +37,13 @@ function handleClientRequest(functionName, args) {
       addLog,
       updateProjectCoreInfo,
       updateProjectInitialInfo,
-      deleteProject
+      deleteProject,
+      updateProjectCoreInfoEx,
+      addAdminUser,
+      updateProjectCoreInfoEx, 
+      addAdminUser,
+      updateProjectDates,  // <-- เพิ่มบรรทัดนี้
+      updateSubtaskDates
     };
 
     if (typeof availableFunctions[functionName] === 'function') {
@@ -108,4 +114,83 @@ function saveData(formData) {
   ]);
 
   return { status: 'success', message: 'บันทึกข้อมูลโครงการสำเร็จ!' };
+}
+
+function updateProjectCoreInfoEx(projectId, newName, newDueDate, newAssignee, newAssigneeImage) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(DATA_SHEET_NAME);
+    const finder = sheet.getRange("I:I").createTextFinder(projectId);
+    const foundCell = finder.findNext();
+    if (!foundCell) throw new Error("ไม่พบโปรเจกต์");
+    
+    const rowIndex = foundCell.getRow();
+    
+    sheet.getRange(rowIndex, COL.PROJECT_NAME).setValue(newName);
+    sheet.getRange(rowIndex, COL.PROJECT_DUE_DATE).setValue(newDueDate || null);
+    sheet.getRange(rowIndex, COL.ASSIGNED_TO).setValue(newAssignee || "");
+    sheet.getRange(rowIndex, COL.ASSIGNED_TO_IMAGE).setValue(newAssigneeImage || "");
+
+    return { status: 'success' };
+  } catch (e) {
+    return { status: 'error', message: 'เกิดข้อผิดพลาด: ' + e.message };
+  }
+}
+
+function addAdminUser(name, email, imageUrl) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(ADMIN_SHEET_NAME);
+    // แถวที่เพิ่มคือ Name, ImageUrl, LineId (เว้นไว้), Email
+    sheet.appendRow([name, imageUrl || "", "", email]);
+    
+    // ล้าง Cache เพื่อให้ดึงข้อมูลใหม่ทันที
+    CacheService.getScriptCache().remove('admins_data');
+    
+    return { status: 'success' };
+  } catch (e) {
+    return { status: 'error', message: 'เกิดข้อผิดพลาดในการเพิ่มผู้ใช้: ' + e.message };
+  }
+}
+
+// --- สำหรับอัปเดตวันที่ของโปรเจกต์หลักในตาราง Gantt ---
+function updateProjectDates(projectId, startDateStr, endDateStr) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(DATA_SHEET_NAME);
+    const finder = sheet.getRange("I:I").createTextFinder(projectId); // คอลัมน์ I คือ PROJECT_ID
+    const foundCell = finder.findNext();
+    if (!foundCell) throw new Error("ไม่พบโปรเจกต์");
+    
+    const rowIndex = foundCell.getRow();
+    
+    // อัปเดต วันที่เริ่ม (คอลัมน์ 1) และ กำหนดส่ง (คอลัมน์ 11)
+    sheet.getRange(rowIndex, 1).setValue(new Date(startDateStr));
+    sheet.getRange(rowIndex, 11).setValue(new Date(endDateStr));
+
+    return { status: 'success' };
+  } catch (e) {
+    return { status: 'error', message: 'เกิดข้อผิดพลาด: ' + e.message };
+  }
+}
+
+// --- สำหรับอัปเดตวันที่ของงานย่อย (Sub-tasks) ในตาราง Gantt ---
+function updateSubtaskDates(projectId, subtaskIndex, startDateStr, endDateStr) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(DATA_SHEET_NAME);
+    const finder = sheet.getRange("I:I").createTextFinder(projectId);
+    const foundCell = finder.findNext();
+    if (!foundCell) throw new Error("ไม่พบโปรเจกต์");
+    
+    const rowIndex = foundCell.getRow();
+    const detailsDataCell = sheet.getRange(rowIndex, 10); // คอลัมน์ 10 คือ DETAILS_DATA
+    const detailsData = JSON.parse(detailsDataCell.getValue() || '{}');
+    
+    if (detailsData.checklist && detailsData.checklist[subtaskIndex]) {
+       detailsData.checklist[subtaskIndex].startDate = startDateStr;
+       detailsData.checklist[subtaskIndex].dueDate = endDateStr;
+       detailsDataCell.setValue(JSON.stringify(detailsData));
+    }
+    
+    return { status: 'success' };
+  } catch (e) {
+    return { status: 'error', message: 'เกิดข้อผิดพลาด: ' + e.message };
+  }
 }
