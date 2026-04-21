@@ -80,7 +80,6 @@
         color: #ef4444; /* red-500 */
     }
 
-
     /* Calendar View Styles */
     .calendar-grid {
         display: grid;
@@ -125,4 +124,32 @@
         cursor: pointer;
         color: white;
     }
+
+    /* =========================================
+       อัปเดตใหม่: GANTT CHART CUSTOM STYLES 
+       ========================================= */
+       
+    /* 1. บังคับให้ Scrollbar ของตาราง Gantt แสดงผล */
+    .gantt-container {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        padding-bottom: 15px; /* เผื่อพื้นที่ให้ Scrollbar */
+    }
+    /* ตกแต่ง Scrollbar ให้ดูสวยงาม */
+    .gantt-container::-webkit-scrollbar { height: 10px; }
+    .gantt-container::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+    .gantt-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    .gantt-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* 2. สีแถบงานที่ "เสร็จแล้ว" (Completed) - สีเขียว */
+    .gantt .bar-wrapper.gantt-completed .bar { fill: #d1fae5 !important; stroke: #10b981 !important; stroke-width: 1px; }
+    .gantt .bar-wrapper.gantt-completed .bar-progress { fill: #10b981 !important; }
+    
+    /* 3. สีแถบงานที่ "เสร็จก่อนกำหนด" (Early Completed) - สีเขียวเข้มและมี Pattern */
+    .gantt .bar-wrapper.gantt-early .bar { fill: #a7f3d0 !important; stroke: #059669 !important; stroke-width: 1.5px; }
+    .gantt .bar-wrapper.gantt-early .bar-progress { fill: #059669 !important; }
+
+    /* 4. สีแถบงานที่ "เลยกำหนด" (Delayed) และยังไม่เสร็จ - สีแดง */
+    .gantt .bar-wrapper.gantt-delayed .bar { fill: #fee2e2 !important; stroke: #ef4444 !important; stroke-width: 1px; }
+    .gantt .bar-wrapper.gantt-delayed .bar-progress { fill: #ef4444 !important; }
 </style>
