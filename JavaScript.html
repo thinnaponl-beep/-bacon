@@ -331,21 +331,35 @@ document.addEventListener('DOMContentLoaded', () => {
     // =================================================================
     const GanttView = {
         chart: null,
+        scrollToToday() {
+            setTimeout(() => {
+                const ganttContainer = document.querySelector('#gantt-chart-container .gantt-container');
+                const todayLine = document.querySelector('#gantt-chart-container .today-highlight');
+                if (ganttContainer && todayLine) {
+                    const todayX = parseFloat(todayLine.getAttribute('x'));
+                    ganttContainer.scrollLeft = Math.max(0, todayX - 200);
+                }
+            }, 300);
+        },
         render() {
             const container = document.getElementById('gantt-chart-container');
             container.innerHTML = '';
             
             const tasks = AppState.projects.map(p => {
                 const start = new Date(p.rawTimestamp).toISOString().split('T')[0];
-                let end = p.projectDueDate ? new Date(p.projectDueDate).toISOString().split('T')[0] : '';
+                let plannedEnd = p.projectDueDate ? new Date(p.projectDueDate).toISOString().split('T')[0] : '';
                 
-                if(!end) {
+                if(!plannedEnd) {
                     const d = new Date(p.rawTimestamp);
                     d.setDate(d.getDate() + 7);
-                    end = d.toISOString().split('T')[0];
+                    plannedEnd = d.toISOString().split('T')[0];
                 }
 
+                let end = plannedEnd;
                 let progress = 0;
+                let custom_class = 'gantt-active';
+                const todayStr = new Date().toISOString().split('T')[0];
+
                 const checklist = p.detailsData?.checklist || [];
                 if (checklist.length > 0) {
                     const completed = checklist.filter(item => item.status === 'Completed' || item.status === 'Complete').length;
@@ -354,13 +368,44 @@ document.addEventListener('DOMContentLoaded', () => {
                     progress = 100;
                 }
 
+                if (p.status === 'Completed') {
+                    progress = 100;
+                    
+                    let actualEndDateStr = null;
+                    const completionLog = p.detailsData?.logs?.find(log => log.type === 'status_change' && log.text.includes("'Completed'"));
+                    
+                    if (completionLog) {
+                        actualEndDateStr = new Date(completionLog.timestamp).toISOString().split('T')[0];
+                    } else {
+                        actualEndDateStr = plannedEnd; 
+                    }
+
+                    end = actualEndDateStr;
+                    
+                    if (actualEndDateStr < plannedEnd) {
+                        custom_class = 'gantt-completed gantt-early'; 
+                    } else {
+                        custom_class = 'gantt-completed'; 
+                    }
+
+                } else {
+                    if (plannedEnd < todayStr) {
+                        custom_class = 'gantt-delayed'; 
+                    }
+                }
+
+                if (new Date(end) < new Date(start)) {
+                    end = start;
+                }
+
                 return {
                     id: p.projectId,
                     name: p.projectName,
                     start: start,
                     end: end,
                     progress: progress,
-                    custom_class: p.status === 'Completed' ? 'gantt-completed' : 'gantt-active'
+                    custom_class: custom_class,
+                    plannedEnd: plannedEnd 
                 };
             });
 
@@ -378,6 +423,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     App.openDetailView(task.id);
                 },
                 on_date_change: async (task, start, end) => {
+                    if(task.custom_class.includes('gantt-completed')) {
+                        UI.showError('ไม่สามารถเลื่อนไทม์ไลน์ของงานที่ปิดไปแล้วได้');
+                        GanttView.render();
+                        return;
+                    }
+
                     const startDateStr = new Date(start.getTime() - (start.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
                     const endDateStr = new Date(end.getTime() - (end.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
                     
@@ -397,11 +448,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             });
+            
+            this.scrollToToday();
 
             document.querySelectorAll('.gantt-zoom-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
+                const newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+                
+                newBtn.addEventListener('click', (e) => {
                     if(this.chart) {
                         this.chart.change_view_mode(e.target.dataset.view);
+                        this.scrollToToday(); 
                     }
                 });
             });
@@ -485,7 +542,6 @@ document.addEventListener('DOMContentLoaded', () => {
             card.querySelector('.card-progress-bar').style.width = `${progress}%`;
             card.querySelector('.card-progress-text').textContent = `${progress}%`;
             
-            // เพิ่มไอคอนแจ้งเตือนว่ามีลิงก์บนการ์ด
             const hasLink = (project.projectLinks && project.projectLinks.length > 0) || project.projectLink;
             if (hasLink) {
                 const badgeContainer = card.querySelector('.flex.items-center.space-x-3');
@@ -811,7 +867,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const createdDate = new Date(project.rawTimestamp);
             const createdStr = createdDate.toLocaleString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-            // เตรียม HTML สำหรับแสดงลิงก์ที่แนบไว้
             let linksHtml = '';
             if (project.projectLinks && project.projectLinks.length > 0) {
                 linksHtml = '<div class="mt-4 flex flex-wrap gap-2">';
@@ -961,24 +1016,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const tasks = checklist.map((item, index) => {
                 const start = item.startDate ? new Date(item.startDate).toISOString().split('T')[0] : new Date(project.rawTimestamp).toISOString().split('T')[0];
-                let end = '';
+                let plannedEnd = '';
                 if (item.dueDate) {
-                    end = new Date(item.dueDate).toISOString().split('T')[0];
+                    plannedEnd = new Date(item.dueDate).toISOString().split('T')[0];
                 } else if (project.projectDueDate) {
-                    end = new Date(project.projectDueDate).toISOString().split('T')[0];
+                    plannedEnd = new Date(project.projectDueDate).toISOString().split('T')[0];
                 } else {
                     const d = new Date(project.rawTimestamp);
                     d.setDate(d.getDate() + 2);
-                    end = d.toISOString().split('T')[0];
+                    plannedEnd = d.toISOString().split('T')[0];
+                }
+
+                let end = plannedEnd;
+                let progress = 0;
+                let custom_class = 'gantt-active';
+                const todayStr = new Date().toISOString().split('T')[0];
+
+                if (item.status === 'Completed' || item.status === 'Complete') {
+                    progress = 100;
+                    
+                    let actualEndDateStr = plannedEnd;
+                    const completionLog = item.history?.slice().reverse().find(log => log.text.includes("'Complete'"));
+                    if(completionLog) {
+                         actualEndDateStr = new Date(completionLog.timestamp).toISOString().split('T')[0];
+                    }
+
+                    end = actualEndDateStr;
+
+                    if (actualEndDateStr < plannedEnd) {
+                        custom_class = 'gantt-completed gantt-early';
+                    } else {
+                        custom_class = 'gantt-completed';
+                    }
+                } else if (item.status === 'In Progress') {
+                    progress = 50;
+                    if (plannedEnd < todayStr) custom_class = 'gantt-delayed';
+                } else {
+                    if (plannedEnd < todayStr) custom_class = 'gantt-delayed';
                 }
 
                 if (new Date(end) < new Date(start)) {
                     end = start;
                 }
-
-                let progress = 0;
-                if (item.status === 'Completed' || item.status === 'Complete') progress = 100;
-                else if (item.status === 'In Progress') progress = 50;
 
                 return {
                     id: `subtask-${index}`,
@@ -986,17 +1065,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     start: start,
                     end: end,
                     progress: progress,
-                    custom_class: (item.status === 'Completed' || item.status === 'Complete') ? 'gantt-completed' : 'gantt-active'
+                    custom_class: custom_class
                 };
             });
 
             container.innerHTML = '<div id="inner-project-gantt"></div>';
-            new Gantt("#inner-project-gantt", tasks, {
+            const subChart = new Gantt("#inner-project-gantt", tasks, {
                 view_mode: 'Day',
                 language: 'en',
                 bar_height: 25,
                 padding: 15,
                 on_date_change: async (task, start, end) => {
+                    if(task.custom_class.includes('gantt-completed')) {
+                        UI.showError('ไม่สามารถเลื่อนไทม์ไลน์ของงานย่อยที่เสร็จแล้วได้');
+                        DetailView.renderGantt(AppState.currentProject);
+                        return;
+                    }
+
                     const subtaskIndex = parseInt(task.id.split('-')[1]);
                     const startDateStr = new Date(start.getTime() - (start.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
                     const endDateStr = new Date(end.getTime() - (end.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
@@ -1017,6 +1102,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             });
+
+            setTimeout(() => {
+                const ganttContainer = document.querySelector('#inner-project-gantt .gantt-container');
+                const todayLine = document.querySelector('#inner-project-gantt .today-highlight');
+                if (ganttContainer && todayLine) {
+                    ganttContainer.scrollLeft = Math.max(0, parseFloat(todayLine.getAttribute('x')) - 100);
+                }
+            }, 300);
         },
         renderChecklist() {
             const container = document.getElementById('checklist-container');
